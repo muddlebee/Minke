@@ -51,6 +51,14 @@ test("macOS packaging unpacks and verifies node-pty's executable helper", async 
     ),
   ]);
   assert.match(forge, /\{\*\.node,spawn-helper\}/u);
+  assert.match(
+    forge,
+    /cp\(nodePtyPackageRoot,[\s\S]*?dereference: true,[\s\S]*?recursive: true/u,
+  );
+  assert.match(
+    forge,
+    /cp\(nodeAddonApiPackageRoot,[\s\S]*?dereference: true,[\s\S]*?recursive: true/u,
+  );
   assert.match(forge, /chmod\(join\(prebuilds, target, "spawn-helper"\), 0o755\)/u);
   assert.match(verifier, /requireExecutable\(join\([\s\S]*?"spawn-helper"/u);
 });

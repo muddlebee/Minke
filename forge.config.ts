@@ -67,9 +67,11 @@ const config: ForgeConfig = {
       await mkdir(nodeModulesRoot, { recursive: true });
       await Promise.all([
         cp(nodePtyPackageRoot, join(nodeModulesRoot, "node-pty"), {
+          dereference: true,
           recursive: true,
         }),
         cp(nodeAddonApiPackageRoot, join(nodeModulesRoot, "node-addon-api"), {
+          dereference: true,
           recursive: true,
         }),
       ]);
