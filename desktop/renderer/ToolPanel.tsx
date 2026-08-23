@@ -315,6 +315,10 @@ interface OruWebviewElement extends HTMLElement {
   reload(): void;
 }
 
+interface OruWebviewNavigationEvent extends Event {
+  readonly url?: unknown;
+}
+
 function WebTool({
   hidden,
   t,
@@ -324,6 +328,7 @@ function WebTool({
 }): ReactNode {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<OruWebviewElement | undefined>(undefined);
+  const navigationRequest = useRef(0);
   const [input, setInput] = useState("https://example.com");
   const [error, setError] = useState<string>();
 
@@ -335,9 +340,27 @@ function WebTool({
     view.setAttribute("src", input);
     view.setAttribute("partition", "persist:oru-tabs-web");
     view.setAttribute("webpreferences", "contextIsolation=yes,nodeIntegration=no,sandbox=yes,webSecurity=yes");
+    const syncAddress = (event: Event): void => {
+      navigationRequest.current += 1;
+      const normalized = normalizeWebTabUrl(
+        (event as OruWebviewNavigationEvent).url,
+      );
+      if (normalized === undefined) {
+        setInput("");
+        setError(t("ui.web.invalid"));
+        return;
+      }
+      setInput(normalized);
+      setError(undefined);
+    };
+    view.addEventListener("did-navigate", syncAddress);
+    view.addEventListener("did-navigate-in-page", syncAddress);
     host.append(view);
     viewRef.current = view;
     return () => {
+      navigationRequest.current += 1;
+      view.removeEventListener("did-navigate", syncAddress);
+      view.removeEventListener("did-navigate-in-page", syncAddress);
       view.remove();
       viewRef.current = undefined;
     };
@@ -346,6 +369,7 @@ function WebTool({
   }, []);
 
   const navigate = (): void => {
+    const request = ++navigationRequest.current;
     const candidate = /^https?:\/\//iu.test(input) ? input : `https://${input}`;
     const normalized = normalizeWebTabUrl(candidate);
     if (normalized === undefined) {
@@ -355,7 +379,9 @@ function WebTool({
     setInput(normalized);
     setError(undefined);
     void viewRef.current?.loadURL(normalized).catch((reason: unknown) => {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      if (navigationRequest.current === request) {
+        setError(reason instanceof Error ? reason.message : String(reason));
+      }
     });
   };
 

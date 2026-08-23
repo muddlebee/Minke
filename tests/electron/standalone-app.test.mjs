@@ -11,9 +11,21 @@ import { _electron as electron } from "playwright-core";
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 async function startFixtureServer() {
-  const server = createServer((_request, response) => {
-    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-    response.end("<!doctype html><title>Oru Web Fixture</title><h1>Web tool is connected</h1>");
+  const server = createServer((request, response) => {
+    if (request.url === "/redirect") {
+      response.writeHead(302, { location: "/landed" });
+      response.end();
+      return;
+    }
+    const sendFixture = () => {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end("<!doctype html><title>Oru Web Fixture</title><h1>Web tool is connected</h1>");
+    };
+    if (request.url === "/slow-navigation") {
+      setTimeout(sendFixture, 400);
+      return;
+    }
+    sendFixture();
   });
   await new Promise((resolveListen, reject) => {
     server.once("error", reject);
@@ -275,13 +287,29 @@ test("standalone Electron shell supports the primary workspace workflow", { time
     const view = document.querySelector("webview");
     return view !== null && "getURL" in view && view.getURL().startsWith(expected);
   }, server.url);
-  await page.getByRole("tab", { name: "Files" }).click();
-  await page.getByRole("tab", { name: "Web" }).click();
-  assert.equal(await address.inputValue(), server.url);
+  await address.fill(`${server.url}/redirect`);
+  await page.getByRole("button", { name: "Go" }).click();
+  await page.waitForFunction((expected) => {
+    const input = document.querySelector(".web-address input");
+    return input instanceof HTMLInputElement && input.value === expected;
+  }, `${server.url}/landed`);
+  await address.fill(`${server.url}/slow-navigation`);
+  await page.getByRole("button", { name: "Go" }).click();
+  await address.fill(`${server.url}/current`);
+  await page.getByRole("button", { name: "Go" }).click();
   await page.waitForFunction((expected) => {
     const view = document.querySelector("webview");
-    return view !== null && "getURL" in view && view.getURL().startsWith(expected);
-  }, server.url);
+    return view !== null && "getURL" in view && view.getURL() === expected;
+  }, `${server.url}/current`);
+  await page.waitForTimeout(500);
+  assert.equal(await page.locator(".web-tool > .error-state").count(), 0);
+  await page.getByRole("tab", { name: "Files" }).click();
+  await page.getByRole("tab", { name: "Web" }).click();
+  assert.equal(await address.inputValue(), `${server.url}/current`);
+  await page.waitForFunction((expected) => {
+    const view = document.querySelector("webview");
+    return view !== null && "getURL" in view && view.getURL() === expected;
+  }, `${server.url}/current`);
 
   await page.screenshot({ path: join(artifacts, "standalone-workspace.png") });
   assert.deepEqual(rendererErrors, [], `renderer errors:\n${rendererErrors.join("\n")}`);
