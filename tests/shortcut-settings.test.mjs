@@ -11,9 +11,9 @@ import {
   bindShortcutSettingsIpc,
 } from "@minke/desktop/main/shortcut-settings.ts";
 import {
-  MINKE_CONFIG_VERSION,
-  MinkeConfigStore,
-} from "@minke/desktop/main/minke-config.ts";
+  ORU_CONFIG_VERSION,
+  OruConfigStore,
+} from "@minke/desktop/main/oru-config.ts";
 import {
   SHORTCUT_SETTINGS_READ_CHANNEL,
   SHORTCUT_SETTINGS_WRITE_CHANNEL,
@@ -27,7 +27,7 @@ const roots = [];
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "minke-shortcuts-"));
   roots.push(root);
-  const config = new MinkeConfigStore(root);
+  const config = new OruConfigStore(root);
   return {
     path: config.path,
     store: config.shortcuts,
@@ -42,31 +42,7 @@ afterEach(async () => {
   );
 });
 
-function assertDefaultRemoteSettings(settings) {
-  assert.match(
-    settings.cloudflare.generatedLabel,
-    /^m-[0123456789abcdefghjkmnpqrstvwxyz]{16}$/u,
-  );
-  assert.deepEqual(settings, {
-    enabled: false,
-    method: "tailscale",
-    tailscale: { transport: "serve" },
-    cloudflare: {
-      hostnameMode: "generated",
-      domain: "",
-      generatedLabel:
-        settings.cloudflare.generatedLabel,
-      customHostname: "",
-      teamName: "",
-      audience: "",
-      tunnel: "",
-      configPath: "",
-      originPort: 49_321,
-    },
-  });
-}
-
-test("the desktop store writes the shared Minke config", async () => {
+test("the desktop store writes the shared Oru config", async () => {
   const { path, store } = await fixture();
   assert.deepEqual(await store.read(), {});
 
@@ -79,21 +55,14 @@ test("the desktop store writes the shared Minke config", async () => {
     "settings.open": "Mod+Comma",
     "session.new": "",
   });
-  const document = JSON.parse(await readFile(path, "utf8"));
-  const { remote, ...documentWithoutRemote } = document;
-  assert.deepEqual(documentWithoutRemote, {
-    version: MINKE_CONFIG_VERSION,
+  assert.deepEqual(JSON.parse(await readFile(path, "utf8")), {
+    version: ORU_CONFIG_VERSION,
     shortcuts: {
       "settings.open": "Mod+Comma",
       "session.new": "",
     },
     terminal: DEFAULT_TERMINAL_SETTINGS,
-    modelRuntime: {
-      lmStudio: { enabled: false },
-      ollama: { enabled: false },
-    },
   });
-  assertDefaultRemoteSettings(remote);
 });
 
 test("invalid bindings never reach disk", async () => {

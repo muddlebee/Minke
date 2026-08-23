@@ -50,23 +50,28 @@ import {
   TerminalSessionRuntime,
 } from "./terminal.ts";
 
+interface AuthorizedPath {
+  readonly path: string;
+  readonly root: string;
+}
+
 interface TabsBindingOptions {
   readonly runtimeRoot?: string;
   readonly defaultCwd: string;
   readonly fileSystemRoot: string;
-  readonly authorizePath?: (candidate: string) => Promise<string>;
+  readonly authorizePath?: (candidate: string) => Promise<AuthorizedPath>;
 }
 
 async function resolveTerminalCwd(
   candidate: string,
-  authorizePath?: (candidate: string) => Promise<string>,
+  authorizePath?: (candidate: string) => Promise<AuthorizedPath>,
 ): Promise<string> {
   if (!isAbsolute(candidate)) {
     throw new TypeError("terminal working directory must be absolute");
   }
   const path = authorizePath === undefined
     ? candidate
-    : await authorizePath(candidate);
+    : (await authorizePath(candidate)).path;
   const details = await stat(path);
   if (!details.isDirectory()) {
     throw new TypeError("terminal working directory must be a directory");
@@ -121,10 +126,22 @@ export function bindTabs(
       }
     },
   });
-  const files = new FileManagerRuntime({
-    rootPath: options.fileSystemRoot,
-    openPath: (path) => external.openPath(path),
-  });
+  const fileManagers = new Map<string, FileManagerRuntime>();
+  const fileManager = (root: string): FileManagerRuntime => {
+    const existing = fileManagers.get(root);
+    if (existing !== undefined) return existing;
+    const created = new FileManagerRuntime({
+      rootPath: root,
+      openPath: (path) => external.openPath(path),
+    });
+    fileManagers.set(root, created);
+    return created;
+  };
+  const authorizeFilePath = async (
+    path: string,
+  ): Promise<AuthorizedPath> => options.authorizePath === undefined
+    ? { path, root: options.fileSystemRoot }
+    : await options.authorizePath(path);
   const handleWillAttach = (
     event: Electron.Event,
     webPreferences: WebPreferences,
@@ -202,10 +219,11 @@ export function bindTabs(
     const path = parsed.path === undefined
       ? options.fileSystemRoot
       : parsed.path;
-    const authorized = options.authorizePath === undefined
-      ? path
-      : await options.authorizePath(path);
-    return await files.list({ path: authorized });
+    const authorized = await authorizeFilePath(path);
+    return await fileManager(authorized.root).list({
+      ...parsed,
+      path: authorized.path,
+    });
   };
   const handleFilesOpen = async (
     event: IpcMainInvokeEvent,
@@ -215,10 +233,8 @@ export function bindTabs(
       throw new Error("unauthorized Files request");
     }
     const parsed = parseFileManagerOpenRequest(request);
-    const path = options.authorizePath === undefined
-      ? parsed.path
-      : await options.authorizePath(parsed.path);
-    await files.open({ path });
+    const authorized = await authorizeFilePath(parsed.path);
+    await fileManager(authorized.root).open({ path: authorized.path });
   };
   const handleFilesPreview = async (
     event: IpcMainInvokeEvent,
@@ -228,10 +244,10 @@ export function bindTabs(
       throw new Error("unauthorized Files request");
     }
     const parsed = parseFileManagerPreviewRequest(request);
-    const path = options.authorizePath === undefined
-      ? parsed.path
-      : await options.authorizePath(parsed.path);
-    return await files.preview({ path });
+    const authorized = await authorizeFilePath(parsed.path);
+    return await fileManager(authorized.root).preview({
+      path: authorized.path,
+    });
   };
   const handleFilesWrite = async (
     event: IpcMainInvokeEvent,
@@ -241,10 +257,11 @@ export function bindTabs(
       throw new Error("unauthorized Files request");
     }
     const parsed = parseFileManagerWriteRequest(request);
-    const path = options.authorizePath === undefined
-      ? parsed.path
-      : await options.authorizePath(parsed.path);
-    return await files.write({ ...parsed, path });
+    const authorized = await authorizeFilePath(parsed.path);
+    return await fileManager(authorized.root).write({
+      ...parsed,
+      path: authorized.path,
+    });
   };
 
   embedder.on("will-attach-webview", handleWillAttach);

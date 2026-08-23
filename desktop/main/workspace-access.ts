@@ -3,6 +3,11 @@ import { realpath, stat } from "node:fs/promises";
 import { basename, isAbsolute, relative } from "node:path";
 import type { DesktopWorkspace } from "@minke/desktop/standalone-contract";
 
+export interface AuthorizedWorkspacePath {
+  readonly path: string;
+  readonly root: string;
+}
+
 /** Window-lifetime capability registry for user-approved workspace paths. */
 export class WorkspaceAccessRegistry {
   readonly #roots = new Set<string>();
@@ -18,22 +23,32 @@ export class WorkspaceAccessRegistry {
     this.#roots.add(path);
     return {
       id: `workspace-${randomUUID()}`,
-      name: basename(path),
+      name: basename(path) || path,
       path,
     };
   }
 
   async authorize(candidate: string): Promise<string> {
+    return (await this.authorizeWithRoot(candidate)).path;
+  }
+
+  async authorizeWithRoot(
+    candidate: string,
+  ): Promise<AuthorizedWorkspacePath> {
     if (!isAbsolute(candidate)) {
       throw new TypeError("workspace path must be absolute");
     }
     const canonical = await realpath(candidate);
-    const allowed = [...this.#roots].some((root) => {
-      const child = relative(root, canonical);
-      return child === "" || (!child.startsWith("..") && !isAbsolute(child));
-    });
-    if (!allowed) throw new Error("path is outside an open workspace");
-    return canonical;
+    const root = [...this.#roots]
+      .filter((approvedRoot) => {
+        const child = relative(approvedRoot, canonical);
+        return child === "" || (!child.startsWith("..") && !isAbsolute(child));
+      })
+      .sort((left, right) => right.length - left.length)[0];
+    if (root === undefined) {
+      throw new Error("path is outside an open workspace");
+    }
+    return { path: canonical, root };
   }
 
   clear(): void {

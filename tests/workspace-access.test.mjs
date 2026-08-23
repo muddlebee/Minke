@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, parse } from "node:path";
 import test from "node:test";
 import { WorkspaceAccessRegistry } from "../desktop/main/workspace-access.ts";
 
@@ -25,6 +25,10 @@ test("workspace capabilities allow children and reject siblings and symlink esca
   const approved = await access.approve(workspace);
   assert.equal(approved.path, await realpath(workspace));
   assert.equal(await access.authorize(child), await realpath(child));
+  assert.deepEqual(await access.authorizeWithRoot(child), {
+    path: await realpath(child),
+    root: await realpath(workspace),
+  });
   await assert.rejects(access.authorize(secret), /outside an open workspace/u);
   await assert.rejects(
     access.authorize(join(escape, "secret.txt")),
@@ -33,4 +37,8 @@ test("workspace capabilities allow children and reject siblings and symlink esca
 
   access.clear();
   await assert.rejects(access.authorize(child), /outside an open workspace/u);
+
+  const rootAccess = new WorkspaceAccessRegistry();
+  const systemRoot = await rootAccess.approve(parse(tmpdir()).root);
+  assert.notEqual(systemRoot.name, "");
 });

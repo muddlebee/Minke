@@ -57,7 +57,10 @@ import {
 import { bindTabs, type TabsBinding } from "./tabs";
 import { bindWindowLocale } from "./window-locale";
 import { bindWindowTheme } from "./window-theme";
-import { WorkspaceAccessRegistry } from "./workspace-access";
+import {
+  WorkspaceAccessRegistry,
+  type AuthorizedWorkspacePath,
+} from "./workspace-access";
 
 const PRODUCT_NAME = "Oru";
 const BACKGROUND_COLOR = "#111412";
@@ -180,8 +183,10 @@ function protectNavigation(webContents: WebContents): void {
   });
 }
 
-async function authorizeWorkspacePath(candidate: string): Promise<string> {
-  return await workspaceAccess.authorize(candidate);
+async function authorizeWorkspacePath(
+  candidate: string,
+): Promise<AuthorizedWorkspacePath> {
+  return await workspaceAccess.authorizeWithRoot(candidate);
 }
 
 function bindWorkspacePicker(window: BrowserWindow): () => void {
