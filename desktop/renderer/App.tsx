@@ -191,7 +191,11 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
       </section>
       {toolsOpen && activeWorkspace !== undefined && (
         <Suspense fallback={<aside className="tool-panel"><p className="muted-state">Loading tools…</p></aside>}>
-          <ToolPanel workspace={activeWorkspace} onClose={() => setToolsOpen(false)} />
+          <ToolPanel
+            key={activeWorkspace.id}
+            workspace={activeWorkspace}
+            onClose={() => setToolsOpen(false)}
+          />
         </Suspense>
       )}
       {paletteOpen && (

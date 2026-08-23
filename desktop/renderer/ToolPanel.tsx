@@ -10,6 +10,16 @@ import type {
 
 type ToolKind = "files" | "terminal" | "web";
 
+function terminalTheme() {
+  const styles = getComputedStyle(document.documentElement);
+  return {
+    background: "#00000000",
+    foreground: styles.getPropertyValue("--text-primary").trim(),
+    cursor: styles.getPropertyValue("--accent").trim(),
+    selectionBackground: "#7f927955",
+  };
+}
+
 export function ToolPanel(props: {
   workspace: DesktopWorkspace;
   onClose(): void;
@@ -127,17 +137,19 @@ function TerminalTool({ cwd }: { cwd: string }): ReactNode {
       fontSize: 12,
       lineHeight: 1.25,
       scrollback: 5_000,
-      theme: {
-        background: "#00000000",
-        foreground: getComputedStyle(document.documentElement).getPropertyValue("--text-primary").trim(),
-        cursor: getComputedStyle(document.documentElement).getPropertyValue("--accent").trim(),
-        selectionBackground: "#7f927955",
-      },
+      theme: terminalTheme(),
       allowTransparency: true,
     });
     const fit = new FitAddon();
     terminal.loadAddon(fit);
     terminal.open(host);
+    const themeObserver = new MutationObserver(() => {
+      terminal.options.theme = terminalTheme();
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
     let sessionId: string | undefined;
     let disposed = false;
     const pending: TerminalEvent[] = [];
@@ -184,6 +196,7 @@ function TerminalTool({ cwd }: { cwd: string }): ReactNode {
     return () => {
       disposed = true;
       if (sessionId !== undefined) window.oruDesktop.terminal.close(sessionId);
+      themeObserver.disconnect();
       resize.disconnect();
       input.dispose();
       unsubscribe();

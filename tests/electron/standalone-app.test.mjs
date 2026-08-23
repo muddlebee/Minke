@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import electronPath from "electron";
@@ -33,9 +33,11 @@ async function startFixtureServer() {
 
 test("standalone Electron shell supports the primary workspace workflow", { timeout: 90_000 }, async (t) => {
   const fixtureRoot = await mkdtemp(join(tmpdir(), "oru-electron-"));
+  const secondFixtureRoot = await mkdtemp(join(tmpdir(), "oru-electron-second-"));
   await writeFile(join(fixtureRoot, "hello.txt"), "oru-file-preview-marker\n", "utf8");
   await mkdir(join(fixtureRoot, "src"));
   await writeFile(join(fixtureRoot, "src", "index.ts"), "export const ready = true;\n", "utf8");
+  await writeFile(join(secondFixtureRoot, "second.txt"), "second-workspace-marker\n", "utf8");
   const server = await startFixtureServer();
   const artifacts = join(projectRoot, "test-results", "electron");
   await mkdir(artifacts, { recursive: true });
@@ -51,11 +53,16 @@ test("standalone Electron shell supports the primary workspace workflow", { time
     await electronApp.close().catch(() => {});
     await server.close().catch(() => {});
     await rm(fixtureRoot, { recursive: true, force: true });
+    await rm(secondFixtureRoot, { recursive: true, force: true });
   });
 
   await electronApp.evaluate(({ dialog }, paths) => {
-    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: paths });
-  }, [fixtureRoot]);
+    const pending = [...paths];
+    dialog.showOpenDialog = async () => ({
+      canceled: false,
+      filePaths: [pending.shift() ?? paths.at(-1)],
+    });
+  }, [fixtureRoot, secondFixtureRoot]);
 
   const page = await electronApp.firstWindow();
   const invokeShortcut = async (id) => {
@@ -103,6 +110,12 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   await page.getByRole("button", { name: "hello.txt" }).click();
   await page.getByText("oru-file-preview-marker", { exact: false }).waitFor();
 
+  await page.getByRole("button", { name: /Open Folder/u }).first().click();
+  await page.getByText(secondFixtureRoot, { exact: true }).first().waitFor();
+  await page.getByRole("button", { name: "second.txt" }).waitFor();
+  await page.locator(".sidebar-row", { hasText: basename(fixtureRoot) }).click();
+  await page.getByRole("button", { name: "hello.txt" }).waitFor();
+
   const composer = page.getByRole("textbox", { name: "Message" });
   await composer.fill("Explain the adapter boundary");
   await composer.press("Enter");
@@ -123,6 +136,21 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   await page.keyboard.press("Enter");
   await page.locator(".xterm-rows").getByText(/oru-terminal-marker/u).waitFor({ timeout: 8_000 });
 
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("dialog", { name: "Settings" }).waitFor();
+  await page.getByRole("button", { name: "light" }).click();
+  assert.equal(await page.locator("html").getAttribute("data-theme"), "light");
+  const lightTerminalForeground = await page.locator(".xterm-rows").evaluate(
+    (element) => getComputedStyle(element).color,
+  );
+  await page.getByRole("button", { name: "dark" }).click();
+  assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
+  await page.waitForFunction((previous) => {
+    const rows = document.querySelector(".xterm-rows");
+    return rows !== null && getComputedStyle(rows).color !== previous;
+  }, lightTerminalForeground);
+  await page.getByRole("button", { name: "Close", exact: true }).click();
+
   await page.getByRole("tab", { name: "Web" }).click();
   const address = page.getByRole("textbox", { name: "Web address" });
   await address.fill(server.url);
@@ -131,14 +159,6 @@ test("standalone Electron shell supports the primary workspace workflow", { time
     const view = document.querySelector("webview");
     return view !== null && "getURL" in view && view.getURL().startsWith(expected);
   }, server.url);
-
-  await page.getByRole("button", { name: "Settings" }).click();
-  await page.getByRole("dialog", { name: "Settings" }).waitFor();
-  await page.getByRole("button", { name: "light" }).click();
-  assert.equal(await page.locator("html").getAttribute("data-theme"), "light");
-  await page.getByRole("button", { name: "dark" }).click();
-  assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
-  await page.getByRole("button", { name: "Close", exact: true }).click();
 
   await page.screenshot({ path: join(artifacts, "standalone-workspace.png") });
   assert.deepEqual(rendererErrors, [], `renderer errors:\n${rendererErrors.join("\n")}`);
