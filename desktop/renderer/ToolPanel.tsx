@@ -132,7 +132,7 @@ function FilesTool({
       if (active) setLoading(false);
     });
     return () => { active = false; };
-  }, [path]);
+  }, [path, root]);
 
   const choose = (entry: FileManagerEntry): void => {
     const request = ++previewRequest.current;

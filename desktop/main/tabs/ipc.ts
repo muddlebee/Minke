@@ -224,10 +224,11 @@ export function bindTabs(
       ? options.fileSystemRoot
       : parsed.path;
     const authorized = await authorizeFilePath(path, parsed.root);
-    const { root: _root, ...managerRequest } = parsed;
     return await fileManager(authorized.root).list({
-      ...managerRequest,
       path: authorized.path,
+      ...(parsed.includeRepository === undefined
+        ? {}
+        : { includeRepository: parsed.includeRepository }),
     });
   };
   const handleFilesOpen = async (
@@ -263,10 +264,10 @@ export function bindTabs(
     }
     const parsed = parseFileManagerWriteRequest(request);
     const authorized = await authorizeFilePath(parsed.path, parsed.root);
-    const { root: _root, ...managerRequest } = parsed;
     return await fileManager(authorized.root).write({
-      ...managerRequest,
       path: authorized.path,
+      content: parsed.content,
+      expectedVersion: parsed.expectedVersion,
     });
   };
 
