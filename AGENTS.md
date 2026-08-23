@@ -2,12 +2,18 @@
 
 ## Product Direction
 
-- Oru is a harness-neutral Electron desktop shell for coding agents.
-- Keep the UI dependent on the `AgentRuntime` contract in
-  `desktop/renderer/agent-runtime.ts`, not on a specific agent harness.
-- Add Pi, Hermes, and other integrations as adapters behind that contract.
-- Do not restore DeepSeek Harness startup, staging, or packaging unless a task
-  explicitly asks for it. The vendored implementation is legacy reference code.
+- Oru is currently a generic, harness-neutral Electron UI framework with a
+  built-in demo runtime.
+- The current scope is the desktop UI/UX and reusable application building
+  blocks. External agent harness integrations are not part of this phase.
+- Keep the UI dependent on the small, generic `AgentRuntime` contract in
+  `desktop/renderer/agent-runtime.ts`. Treat it as an extension boundary, not a
+  commitment to any specific harness or protocol.
+- Do not add harness-specific dependencies, adapters, or assumptions unless a
+  separate task explicitly defines that integration.
+- Do not restore DeepSeek Harness startup, staging, or packaging. The vendored
+  implementation is dormant legacy reference code unless a task explicitly
+  states otherwise.
 - Use **Oru** for active product copy and packaging. Existing `@minke/*` import
   aliases and repository URLs are internal compatibility names; do not rename
   them as part of unrelated changes.
@@ -20,7 +26,8 @@
   Validate data crossing IPC in both directions and keep Node/Electron APIs out
   of the renderer.
 - `desktop/renderer/` owns presentation and interaction state. Keep components
-  usable with the demo runtime and an injected production runtime.
+  usable through the generic runtime contract, using the demo runtime for
+  standalone development and verification.
 - Treat approved workspace roots as capabilities. Resolve canonical paths and
   reject sibling and symlink escapes before filesystem access.
 - Keep embedded web content isolated, credential-free, and limited to validated
