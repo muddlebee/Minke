@@ -53,6 +53,9 @@ test("standalone UI and demo runtime ship Chinese copy", () => {
   assert.equal(translateDesktop("zh", "ui.tools.terminal"), "终端");
   assert.equal(translateDesktop("zh", "ui.files.loadFailed"), "无法加载此文件夹。");
   assert.equal(translateDesktop("zh", "ui.files.previewFailed"), "无法预览此文件。");
+  assert.equal(translateDesktop("zh", "ui.terminal.startFailed"), "无法启动终端。");
+  assert.equal(translateDesktop("zh", "ui.terminal.runtimeError"), "终端遇到错误。");
+  assert.equal(translateDesktop("zh", "ui.web.navigationFailed"), "无法加载此网页。");
   assert.match(translateDesktop("zh", "ui.welcome.lede"), /文件/u);
 
   const runtime = new DemoAgentRuntime("zh");

@@ -112,6 +112,7 @@ function FilesTool({
     previewRequest.current += 1;
     setPreview(undefined);
     setError(undefined);
+    setParent(path);
     setPath(nextPath);
   };
 
@@ -121,7 +122,6 @@ function FilesTool({
     setError(undefined);
     setPreview(undefined);
     setEntries([]);
-    setParent(undefined);
     void window.oruDesktop.files.list({ path, root }).then((result) => {
       if (!active) return;
       setPath(result.path);
@@ -244,7 +244,10 @@ function TerminalTool({
         else if (event.type === "exit") {
           activeTerminal.write(`\r\n\x1b[2m${t("ui.terminal.exit", { code: String(event.exitCode ?? "?") })}\x1b[0m\r\n`);
         } else {
-          activeTerminal.write(`\r\n\x1b[31m${event.message}\x1b[0m\r\n`);
+          console.warn("Terminal runtime error:", event.message);
+          activeTerminal.write(
+            `\r\n\x1b[31m${t("ui.terminal.runtimeError")}\x1b[0m\r\n`,
+          );
         }
       };
       unsubscribe = window.oruDesktop.terminal.subscribe((event) => {
@@ -291,7 +294,8 @@ function TerminalTool({
     };
     void start().catch((reason: unknown) => {
       if (!disposed) {
-        setError(reason instanceof Error ? reason.message : String(reason));
+        console.warn("Unable to start Terminal:", reason);
+        setError(t("ui.terminal.startFailed"));
       }
     });
     return () => {
@@ -385,7 +389,8 @@ function WebTool({
     setError(undefined);
     void viewRef.current?.loadURL(normalized).catch((reason: unknown) => {
       if (navigationRequest.current === request) {
-        setError(reason instanceof Error ? reason.message : String(reason));
+        console.warn("Unable to navigate Web tool:", reason);
+        setError(t("ui.web.navigationFailed"));
       }
     });
   };

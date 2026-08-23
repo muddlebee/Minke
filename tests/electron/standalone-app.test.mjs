@@ -315,6 +315,9 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   await address.fill("https://user:secret@example.com/");
   await page.getByRole("button", { name: "Go" }).click();
   await page.getByText("Enter a credential-free HTTP(S) URL.").waitFor();
+  await address.fill("http://127.0.0.1:1/unreachable");
+  await page.getByRole("button", { name: "Go" }).click();
+  await page.getByText("Unable to load this page.", { exact: true }).waitFor();
   await address.fill(server.url);
   await page.getByRole("button", { name: "Go" }).click();
   await page.waitForFunction((expected) => {
@@ -352,6 +355,8 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   await page.getByRole("button", { name: "missing-next" }).click();
   await page.getByText("Unable to load this folder.", { exact: true }).waitFor();
   assert.equal(await page.locator(".file-row").count(), 0);
+  await page.getByRole("button", { name: "Parent folder" }).click();
+  await page.getByRole("button", { name: "hello.txt" }).waitFor();
 
   await page.screenshot({ path: join(artifacts, "standalone-workspace.png") });
   assert.deepEqual(rendererErrors, [], `renderer errors:\n${rendererErrors.join("\n")}`);
