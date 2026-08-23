@@ -218,6 +218,12 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   await page.keyboard.type("printf 'session-%s\\n' \"$ORU_PERSIST_TEST\"");
   await page.keyboard.press("Enter");
   await page.locator(".xterm-rows").getByText("session-kept", { exact: true }).waitFor({ timeout: 8_000 });
+  await page.getByRole("button", { name: "Hide tools" }).click();
+  await page.getByRole("button", { name: "Show tools" }).click();
+  await terminal.click();
+  await page.keyboard.type("printf 'collapsed-%s\\n' \"$ORU_PERSIST_TEST\"");
+  await page.keyboard.press("Enter");
+  await page.locator(".xterm-rows").getByText("collapsed-kept", { exact: true }).waitFor({ timeout: 8_000 });
 
   await page.getByRole("button", { name: "Settings" }).click();
   await page.getByRole("dialog", { name: "Settings" }).waitFor();

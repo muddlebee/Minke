@@ -32,6 +32,7 @@ function terminalTheme() {
 }
 
 export function ToolPanel(props: {
+  hidden: boolean;
   locale: DesktopLocale;
   workspace: DesktopWorkspace;
   onClose(): void;
@@ -43,7 +44,7 @@ export function ToolPanel(props: {
     [props.locale],
   );
   return (
-    <aside className="tool-panel" aria-label={t("ui.tools.workspace")}>
+    <aside className="tool-panel" hidden={props.hidden} aria-label={t("ui.tools.workspace")}>
       <header className="tool-panel__header">
         <div className="tool-tabs" role="tablist" aria-label={t("ui.tools.workspace")}>
           {(["files", "terminal", "web"] as const).map((kind) => (

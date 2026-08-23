@@ -214,10 +214,11 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
             />
           : <Conversation key={activeSession.id} session={activeSession} runtime={runtime} t={t} />}
       </section>
-      {toolsOpen && activeWorkspace !== undefined && (
-        <Suspense fallback={<aside className="tool-panel"><p className="muted-state">{t("ui.tools.loading")}</p></aside>}>
+      {activeWorkspace !== undefined && (
+        <Suspense fallback={toolsOpen ? <aside className="tool-panel"><p className="muted-state">{t("ui.tools.loading")}</p></aside> : null}>
           <ToolPanel
             key={activeWorkspace.id}
+            hidden={!toolsOpen}
             locale={locale}
             workspace={activeWorkspace}
             onClose={() => setToolsOpen(false)}
