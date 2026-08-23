@@ -309,7 +309,7 @@ function effectiveAccelerators(
   overrides: ShortcutBindings,
   platform: NodeJS.Platform,
 ): Record<ProductShortcutActionId, string | undefined> {
-  const effective = resolveProductShortcutBindings(overrides);
+  const effective = resolveProductShortcutBindings(overrides, platform);
   return Object.fromEntries(
     Object.entries(effective).map(([id, binding]) => [
       id,

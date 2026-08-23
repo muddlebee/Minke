@@ -112,10 +112,17 @@ test("conflicting product bindings are disabled consistently", () => {
   const effective = resolveProductShortcutBindings({
     "settings.open": "Alt+S",
     "tabs.toggle": "Alt+S",
-  });
+  }, "darwin");
   assert.equal(effective["settings.open"], undefined);
   assert.equal(effective["tabs.toggle"], undefined);
   assert.equal(effective["workspace.open"], "Mod+O");
+
+  const aliasConflict = resolveProductShortcutBindings({
+    "settings.open": "Mod+S",
+    "tabs.toggle": "Meta+S",
+  }, "darwin");
+  assert.equal(aliasConflict["settings.open"], undefined);
+  assert.equal(aliasConflict["tabs.toggle"], undefined);
 });
 
 test("shortcut labels reflect platform modifiers and disabled bindings", () => {

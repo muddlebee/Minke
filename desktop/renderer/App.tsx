@@ -70,7 +70,10 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutBindings, setShortcutBindings] =
     useState<EffectiveProductShortcutBindings>(
-      () => resolveProductShortcutBindings({}),
+      () => resolveProductShortcutBindings(
+        {},
+        window.oruDesktop.about.platform,
+      ),
     );
   const lastSessionByWorkspace = useRef(new Map<string, string>());
   const [theme, setTheme] = useState<ThemePreference>(() => {
@@ -119,12 +122,18 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
     void window.oruDesktop.shortcuts.read().then((overrides) => {
       if (active) {
         setShortcutBindings(
-          resolveProductShortcutBindings(overrides),
+          resolveProductShortcutBindings(
+            overrides,
+            window.oruDesktop.about.platform,
+          ),
         );
       }
     }).catch(() => {
       if (active) {
-        setShortcutBindings(resolveProductShortcutBindings({}));
+        setShortcutBindings(resolveProductShortcutBindings(
+          {},
+          window.oruDesktop.about.platform,
+        ));
       }
     });
     return () => {

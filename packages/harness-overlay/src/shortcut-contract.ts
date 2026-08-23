@@ -77,6 +77,7 @@ export type EffectiveProductShortcutBindings = Readonly<
 
 export function resolveProductShortcutBindings(
   overrides: ShortcutBindings,
+  platform: string,
 ): EffectiveProductShortcutBindings {
   const parsed = parseShortcutBindings(overrides);
   const ids = Object.keys(
@@ -93,14 +94,19 @@ export function resolveProductShortcutBindings(
   const counts = new Map<string, number>();
   for (const binding of Object.values(effective)) {
     if (binding === undefined || binding === "") continue;
-    counts.set(binding, (counts.get(binding) ?? 0) + 1);
+    const label = formatShortcutBinding(binding, platform);
+    if (label !== undefined) {
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
   }
   for (const id of ids) {
     const binding = effective[id];
+    const label = binding === undefined || binding === ""
+      ? undefined
+      : formatShortcutBinding(binding, platform);
     if (
-      binding !== undefined &&
-      binding !== "" &&
-      (counts.get(binding) ?? 0) > 1
+      label !== undefined &&
+      (counts.get(label) ?? 0) > 1
     ) {
       effective[id] = undefined;
     }
