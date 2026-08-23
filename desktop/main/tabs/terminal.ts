@@ -90,14 +90,17 @@ function terminalEnvironment(
   );
   environment.TERM = "xterm-256color";
   environment.COLORTERM = "truecolor";
-  environment.TERM_PROGRAM = "Minke";
+  environment.TERM_PROGRAM = "Oru";
   return environment;
 }
 
 export function loadTerminalPty(
-  runtimeRoot: string,
+  runtimeRoot?: string,
 ): TerminalPtyModule {
-  const require = createRequire(join(runtimeRoot, "package.json"));
+  const require = createRequire(join(
+    runtimeRoot ?? process.cwd(),
+    "package.json",
+  ));
   return require("node-pty") as TerminalPtyModule;
 }
 

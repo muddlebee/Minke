@@ -1,15 +1,15 @@
 import type { DesktopLocale } from "./locale-contract.ts";
 
 const zh = {
-  "bootstrap.loading": "正在启动 Minke",
+  "bootstrap.loading": "正在启动 Oru",
   "runtime.exitCode": "退出码：{value}",
   "runtime.signal": "信号：{value}",
-  "runtime.stoppedTitle": "DeepSeek Harness 已停止",
-  "runtime.stoppedMessage": "本地 Harness 进程意外退出。",
+  "runtime.stoppedTitle": "Agent 运行时已停止",
+  "runtime.stoppedMessage": "Agent 运行时进程意外退出。",
   "runtime.restart": "重新启动",
-  "runtime.quit": "退出 Minke",
-  "runtime.restartFailedTitle": "无法重新启动 DeepSeek Harness",
-  "runtime.startupFailedTitle": "Minke 启动失败",
+  "runtime.quit": "退出 Oru",
+  "runtime.restartFailedTitle": "无法重新启动 Agent 运行时",
+  "runtime.startupFailedTitle": "Oru 启动失败",
   "menu.file": "文件",
   "menu.view": "视图",
   "menu.commandPalette": "命令面板…",
@@ -32,17 +32,17 @@ const zh = {
 export type DesktopMessageKey = keyof typeof zh;
 
 const en: Record<DesktopMessageKey, string> = {
-  "bootstrap.loading": "Starting Minke",
+  "bootstrap.loading": "Starting Oru",
   "runtime.exitCode": "Exit code: {value}",
   "runtime.signal": "Signal: {value}",
-  "runtime.stoppedTitle": "DeepSeek Harness stopped",
+  "runtime.stoppedTitle": "Agent runtime stopped",
   "runtime.stoppedMessage":
-    "The local Harness process exited unexpectedly.",
+    "The local agent runtime process exited unexpectedly.",
   "runtime.restart": "Restart",
-  "runtime.quit": "Quit Minke",
+  "runtime.quit": "Quit Oru",
   "runtime.restartFailedTitle":
-    "Unable to restart DeepSeek Harness",
-  "runtime.startupFailedTitle": "Minke failed to start",
+    "Unable to restart agent runtime",
+  "runtime.startupFailedTitle": "Oru failed to start",
   "menu.file": "File",
   "menu.view": "View",
   "menu.commandPalette": "Command Palette…",
@@ -72,7 +72,7 @@ export type DesktopTranslateParams = Readonly<
   Record<string, unknown>
 >;
 
-/** Translate one desktop-owned native string using Harness-compatible braces. */
+/** Translate one desktop-owned native string using named braces. */
 export function translateDesktop(
   locale: DesktopLocale,
   key: DesktopMessageKey,
@@ -91,7 +91,7 @@ export type DesktopLocaleSnapshot = Readonly<{
   revision: number;
 }>;
 
-/** In-memory desktop projection of Harness's authoritative active locale. */
+/** In-memory desktop projection of the renderer's active locale. */
 export class DesktopLocaleRuntime {
   #snapshot: DesktopLocaleSnapshot;
   readonly #listeners = new Set<() => void>();

@@ -1,10 +1,10 @@
-/** Shared desktop/client contract for durable Minke keyboard shortcuts. */
+/** Shared desktop/client contract for durable Oru keyboard shortcuts. */
 
 export const SHORTCUT_SETTINGS_READ_CHANNEL =
-  "minke:shortcut-settings:read";
+  "oru:shortcut-settings:read";
 export const SHORTCUT_SETTINGS_WRITE_CHANNEL =
-  "minke:shortcut-settings:write";
-export const SHORTCUT_INVOKE_CHANNEL = "minke:shortcut:invoke";
+  "oru:shortcut-settings:write";
+export const SHORTCUT_INVOKE_CHANNEL = "oru:shortcut:invoke";
 
 export const DEFAULT_SHORTCUT_BINDINGS = Object.freeze({
   "palette.open": "Mod+K",
@@ -71,7 +71,7 @@ export const SHORTCUT_BINDING_PATTERN = new RegExp(
 
 export type ShortcutBindings = Record<string, string>;
 
-/** Narrow untrusted native-menu messages to Minke-owned shortcut actions. */
+/** Narrow untrusted native-menu messages to Oru-owned shortcut actions. */
 export function isProductShortcutActionId(
   value: unknown,
 ): value is ProductShortcutActionId {

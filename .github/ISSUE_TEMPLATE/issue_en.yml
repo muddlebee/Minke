@@ -39,9 +39,9 @@ body:
       required: true
 
   - type: input
-    id: minke_version
+    id: oru_version
     attributes:
-      label: Minke version
+      label: Oru version
       description: If relevant, find this in the About screen or release filename.
       placeholder: e.g. 0.1.0
 

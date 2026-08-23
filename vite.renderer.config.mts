@@ -7,6 +7,7 @@ import { defineConfig } from "vite";
 const projectRoot = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
+  base: "./",
   root: resolve(projectRoot, "desktop", "renderer"),
   publicDir: resolve(projectRoot, "public"),
   plugins: [react(), tailwindcss()],

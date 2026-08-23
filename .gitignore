@@ -20,6 +20,7 @@ docs/research
 /artifacts/design-qa/
 /design-qa.md
 /.impeccable/
+/test-results/
 
 # Environment files
 .env

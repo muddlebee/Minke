@@ -23,8 +23,46 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  verify:
+    name: Verify standalone desktop
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CI: "true"
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install Electron test prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes xvfb
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck and unit test
+        run: pnpm typecheck && pnpm test:desktop
+
+      - name: Test Electron interactions
+        run: xvfb-run --auto-servernum pnpm test:electron
+
   package:
     name: Package ${{ matrix.platform }}-${{ matrix.arch }}
+    needs: verify
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     strategy:
@@ -44,7 +82,6 @@ jobs:
       - name: Check out source
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          submodules: recursive
           persist-credentials: false
 
       - name: Install pnpm
@@ -55,9 +92,7 @@ jobs:
         with:
           node-version: "24"
           cache: pnpm
-          cache-dependency-path: |
-            pnpm-lock.yaml
-            vendor/deepseek-harness/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Verify runner target
         env:
@@ -79,15 +114,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Harness dependencies
-        run: pnpm --dir vendor/deepseek-harness install --recursive --frozen-lockfile --config.node-linker=isolated
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Test desktop
-        run: pnpm test:desktop
-
       - name: Prepare short Windows package temp
         if: runner.os == 'Windows'
         shell: pwsh
@@ -107,7 +133,7 @@ jobs:
       - name: Upload distributables
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: minke-${{ matrix.platform }}-${{ matrix.arch }}
+          name: oru-${{ matrix.platform }}-${{ matrix.arch }}
           path: out/make/**/*
           if-no-files-found: error
           retention-days: 14
@@ -126,7 +152,7 @@ jobs:
       - name: Download distributables
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: minke-*
+          pattern: oru-*
           path: release-artifacts
           merge-multiple: false
 
@@ -154,28 +180,28 @@ jobs:
             cp -- "${matches[0]}" "release-assets/$destination"
           }
 
-          stage_asset Minke-macos-arm64.dmg \
-            minke-darwin-arm64 \
-            'Minke-*.dmg'
-          stage_asset Minke-macos-x64.dmg \
-            minke-darwin-x64 \
-            'Minke-*.dmg'
-          stage_asset Minke-windows-x64.exe \
-            minke-win32-x64 \
-            'Minke-* Setup.exe'
-          stage_asset Minke-linux-x64.deb \
-            minke-linux-x64 \
-            'minke_*_amd64.deb'
-          stage_asset Minke-linux-x64.rpm \
-            minke-linux-x64 \
-            'minke-*.x86_64.rpm'
-          stage_asset Minke-linux-x64.AppImage \
-            minke-linux-x64 \
-            'Minke-*.AppImage'
+          stage_asset Oru-macos-arm64.dmg \
+            oru-darwin-arm64 \
+            'Oru-*.dmg'
+          stage_asset Oru-macos-x64.dmg \
+            oru-darwin-x64 \
+            'Oru-*.dmg'
+          stage_asset Oru-windows-x64.exe \
+            oru-win32-x64 \
+            'Oru-* Setup.exe'
+          stage_asset Oru-linux-x64.deb \
+            oru-linux-x64 \
+            'oru_*_amd64.deb'
+          stage_asset Oru-linux-x64.rpm \
+            oru-linux-x64 \
+            'oru-*.x86_64.rpm'
+          stage_asset Oru-linux-x64.AppImage \
+            oru-linux-x64 \
+            'Oru-*.AppImage'
 
           (
             cd release-assets
-            sha256sum Minke-* > SHA256SUMS
+            sha256sum Oru-* > SHA256SUMS
           )
 
       - name: Publish GitHub Release
@@ -199,5 +225,5 @@ jobs:
             gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
               --verify-tag \
               --generate-notes \
-              --title "Minke $GITHUB_REF_NAME"
+              --title "Oru $GITHUB_REF_NAME"
           fi

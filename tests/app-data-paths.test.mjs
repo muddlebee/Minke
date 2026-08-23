@@ -15,8 +15,8 @@ const desktopMainSource = await readFile(
   "utf8",
 );
 
-test("desktop data and browser session data share ~/.minke", async () => {
-  const homePath = await mkdtemp(join(tmpdir(), "minke-app-data-"));
+test("desktop data and browser session data share ~/.oru", async () => {
+  const homePath = await mkdtemp(join(tmpdir(), "oru-app-data-"));
   const calls = [];
   try {
     configureAppDataPaths({
@@ -29,7 +29,7 @@ test("desktop data and browser session data share ~/.minke", async () => {
       },
     });
 
-    const dataPath = join(homePath, ".minke");
+    const dataPath = join(homePath, ".oru");
     assert.deepEqual(calls, [
       ["userData", dataPath],
       ["sessionData", dataPath],

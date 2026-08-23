@@ -1,9 +1,9 @@
 /** Shared desktop/client contract for durable Terminal rendering settings. */
 
 export const TERMINAL_SETTINGS_READ_CHANNEL =
-  "minke:terminal-settings:read";
+  "oru:terminal-settings:read";
 export const TERMINAL_SETTINGS_WRITE_CHANNEL =
-  "minke:terminal-settings:write";
+  "oru:terminal-settings:write";
 
 export const TERMINAL_FONT_SIZE_MIN = 8;
 export const TERMINAL_FONT_SIZE_MAX = 32;

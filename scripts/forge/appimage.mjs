@@ -9,7 +9,7 @@
 // Usage:
 //   node scripts/forge/appimage.mjs [path-to-deb]
 //
-// With no argument the script searches out/make for the minke_*_amd64.deb
+// With no argument the script searches out/make for the oru_*_amd64.deb
 // produced by `pnpm make`. The AppImage is written next to the deb, under
 // out/make, so the existing artifact upload and release staging pick it up
 // unchanged.
@@ -43,7 +43,7 @@ const packageManifest = require(join(projectRoot, "package.json"));
 // require parameterizing both the tool asset and OUTPUT_NAME.
 const APPIMAGE_TOOL_URL =
   "https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage";
-const OUTPUT_NAME = "Minke-linux-x64.AppImage";
+const OUTPUT_NAME = "Oru-linux-x64.AppImage";
 
 function fail(message) {
   throw new Error(message);
@@ -108,16 +108,16 @@ async function findDeb(projectRoot) {
     throw error;
   }
   const matches = entries
-    .filter((entry) => /^minke_.*_amd64\.deb$/u.test(basename(entry)))
+    .filter((entry) => /^oru_.*_amd64\.deb$/u.test(basename(entry)))
     .map((entry) => join(outMake, entry));
   if (matches.length === 0) {
     fail(
-      `no minke_*_amd64.deb found under ${outMake}; run "pnpm make" first`,
+      `no oru_*_amd64.deb found under ${outMake}; run "pnpm make" first`,
     );
   }
   if (matches.length > 1) {
     fail(
-      `expected exactly one minke_*_amd64.deb under ${outMake}, found ${String(
+      `expected exactly one oru_*_amd64.deb under ${outMake}, found ${String(
         matches.length,
       )}`,
     );
@@ -165,7 +165,7 @@ async function stageDesktopEntry(appDir) {
     "usr",
     "share",
     "applications",
-    "minke.desktop",
+    "oru.desktop",
   );
   const source = await readFile(sourceDesktop, "utf8");
   const normalized = source.replace(/\r\n?/gu, "\n");
@@ -178,15 +178,15 @@ async function stageDesktopEntry(appDir) {
   // AppImage desktop entries launch through AppRun; use a relative Exec and a
   // root-level icon so desktop integration resolves both inside the AppDir.
   const appImageDesktop = normalized
-    .replace(/^Exec=.*$/mu, "Exec=Minke")
-    .replace(/^Icon=.*$/mu, "Icon=minke");
-  await writeFile(join(appDir, "Minke.desktop"), appImageDesktop);
+    .replace(/^Exec=.*$/mu, "Exec=Oru")
+    .replace(/^Icon=.*$/mu, "Icon=oru");
+  await writeFile(join(appDir, "Oru.desktop"), appImageDesktop);
 }
 
 async function stageIcon(appDir) {
-  const debIcon = join(appDir, "usr", "share", "pixmaps", "minke.png");
+  const debIcon = join(appDir, "usr", "share", "pixmaps", "oru.png");
   try {
-    await copyFile(debIcon, join(appDir, "minke.png"));
+    await copyFile(debIcon, join(appDir, "oru.png"));
     return;
   } catch (error) {
     if (!(error instanceof Error && error.code === "ENOENT")) {
@@ -196,15 +196,15 @@ async function stageIcon(appDir) {
   }
   await copyFile(
     join(projectRoot, "resources", "icons", "icon.png"),
-    join(appDir, "minke.png"),
+    join(appDir, "oru.png"),
   );
 }
 
 async function stageLaunchers(appDir) {
-  const binaryPath = join(appDir, "usr", "lib", "minke", "Minke");
+  const binaryPath = join(appDir, "usr", "lib", "oru", "Oru");
   await stat(binaryPath);
-  await symlink("usr/lib/minke/Minke", join(appDir, "AppRun"));
-  await symlink("usr/lib/minke/Minke", join(appDir, "Minke"));
+  await symlink("usr/lib/oru/Oru", join(appDir, "AppRun"));
+  await symlink("usr/lib/oru/Oru", join(appDir, "Oru"));
   ensureExecutable(binaryPath);
 }
 
@@ -212,7 +212,7 @@ async function appimageToolPath() {
   if (process.env.APPIMAGETOOL_PATH !== undefined) {
     return process.env.APPIMAGETOOL_PATH;
   }
-  const toolPath = join(tmpdir(), "minke-appimagetool-x86_64.AppImage");
+  const toolPath = join(tmpdir(), "oru-appimagetool-x86_64.AppImage");
   try {
     await stat(toolPath);
   } catch {
@@ -252,7 +252,7 @@ async function main() {
     debArg !== undefined ? resolve(debArg) : await findDeb(projectRoot);
   const outputPath = join(dirname(debPath), OUTPUT_NAME);
 
-  const appDir = join(tmpdir(), `minke-appimage-${process.pid}`);
+  const appDir = join(tmpdir(), `oru-appimage-${process.pid}`);
   await mkdir(appDir, { recursive: true });
   try {
     console.log(`[appimage] unpacking ${debPath}`);
@@ -281,7 +281,7 @@ async function main() {
     const outputStat = await stat(outputPath);
     const sizeMiB = (outputStat.size / 1024 / 1024).toFixed(1);
     console.log(
-      `[appimage] ${packageManifest.name ?? "Minke"} AppImage ready: ${outputPath} (${sizeMiB} MiB)`,
+      `[appimage] ${packageManifest.name ?? "Oru"} AppImage ready: ${outputPath} (${sizeMiB} MiB)`,
     );
   } finally {
     await rm(appDir, { recursive: true, force: true });

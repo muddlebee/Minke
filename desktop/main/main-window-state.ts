@@ -27,14 +27,14 @@ interface MainWindowBounds {
  * electron-window-state persist subsequent bounds and native window modes.
  */
 export function createStatefulMainWindow(
-  minkeConfigPath: string,
+  configPath: string,
   createWindow: (bounds: MainWindowBounds) => BrowserWindow,
   createState: WindowStateFactory = windowStateKeeper,
 ): BrowserWindow {
   const state = createState({
     defaultWidth: DEFAULT_MAIN_WINDOW_WIDTH,
     defaultHeight: DEFAULT_MAIN_WINDOW_HEIGHT,
-    path: dirname(minkeConfigPath),
+    path: dirname(configPath),
     file: MAIN_WINDOW_STATE_FILE,
     maximize: true,
     fullScreen: true,
