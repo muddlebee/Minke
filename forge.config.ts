@@ -7,7 +7,7 @@ import { MakerZIP } from "@electron-forge/maker-zip";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { VitePlugin } from "@electron-forge/plugin-vite";
 import type { ForgeConfig } from "@electron-forge/shared-types";
-import { cp, mkdir, readdir, rm } from "node:fs/promises";
+import { chmod, cp, mkdir, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { pruneMacElectronLocales } from "./scripts/forge/electron-locales.ts";
 import { verifyStandalonePackage } from "./scripts/forge/standalone-artifact.ts";
@@ -20,7 +20,7 @@ const nodePtyPackageRoot = join(projectRoot, "node_modules", "node-pty");
 const nodeAddonApiPackageRoot = join(projectRoot, "node_modules", "node-addon-api");
 const nativeUnpack = process.platform === "win32"
   ? "**/node_modules/node-pty/**/*.{dll,node}"
-  : "**/node_modules/{node-pty,sys}/**/*.node";
+  : "**/node_modules/{node-pty,sys}/**/{*.node,spawn-helper}";
 
 async function pruneForeignNodePtyPrebuilds(
   buildPath: string,
@@ -36,6 +36,9 @@ async function pruneForeignNodePtyPrebuilds(
       force: true,
       recursive: true,
     })));
+  if (platform === "darwin") {
+    await chmod(join(prebuilds, target, "spawn-helper"), 0o755);
+  }
 }
 
 function logPackageStage(

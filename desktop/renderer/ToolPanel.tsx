@@ -1,8 +1,14 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
+import {
+  translateDesktop,
+  type DesktopMessageKey,
+  type DesktopTranslateParams,
+} from "@minke/desktop/i18n";
+import type { DesktopLocale } from "@minke/desktop/locale-contract";
 import { normalizeWebTabUrl } from "@minke/harness-overlay/tabs/contract";
 import type { TerminalEvent } from "@minke/harness-overlay/tabs/terminal-contract";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { DesktopWorkspace } from "@minke/desktop/standalone-contract";
 import type {
   FileManagerEntry,
@@ -10,6 +16,10 @@ import type {
 } from "@minke/harness-overlay/tabs/files-contract";
 
 type ToolKind = "files" | "terminal" | "web";
+type Translate = (
+  key: DesktopMessageKey,
+  params?: DesktopTranslateParams,
+) => string;
 
 function terminalTheme() {
   const styles = getComputedStyle(document.documentElement);
@@ -22,14 +32,19 @@ function terminalTheme() {
 }
 
 export function ToolPanel(props: {
+  locale: DesktopLocale;
   workspace: DesktopWorkspace;
   onClose(): void;
 }): ReactNode {
   const [active, setActive] = useState<ToolKind>("files");
+  const t: Translate = useCallback(
+    (key, params) => translateDesktop(props.locale, key, params),
+    [props.locale],
+  );
   return (
-    <aside className="tool-panel" aria-label="Workspace tools">
+    <aside className="tool-panel" aria-label={t("ui.tools.workspace")}>
       <header className="tool-panel__header">
-        <div className="tool-tabs" role="tablist" aria-label="Tools">
+        <div className="tool-tabs" role="tablist" aria-label={t("ui.tools.workspace")}>
           {(["files", "terminal", "web"] as const).map((kind) => (
             <button
               className="tool-tab"
@@ -40,22 +55,22 @@ export function ToolPanel(props: {
               aria-selected={active === kind}
               type="button"
             >
-              {kind === "files" ? "Files" : kind === "terminal" ? "Terminal" : "Web"}
+              {kind === "files" ? t("ui.tools.files") : kind === "terminal" ? t("ui.tools.terminal") : t("ui.tools.web")}
             </button>
           ))}
         </div>
-        <button className="icon-button" onClick={props.onClose} type="button" aria-label="Close tools">×</button>
+        <button className="icon-button" onClick={props.onClose} type="button" aria-label={t("ui.tools.close")}>×</button>
       </header>
       <div className="tool-panel__body">
-        {active === "files" && <FilesTool root={props.workspace.path} />}
-        {active === "terminal" && <TerminalTool cwd={props.workspace.path} />}
-        {active === "web" && <WebTool />}
+        {active === "files" && <FilesTool root={props.workspace.path} t={t} />}
+        {active === "terminal" && <TerminalTool cwd={props.workspace.path} t={t} />}
+        {active === "web" && <WebTool t={t} />}
       </div>
     </aside>
   );
 }
 
-function FilesTool({ root }: { root: string }): ReactNode {
+function FilesTool({ root, t }: { root: string; t: Translate }): ReactNode {
   const [path, setPath] = useState(root);
   const [parent, setParent] = useState<string>();
   const [entries, setEntries] = useState<readonly FileManagerEntry[]>([]);
@@ -108,13 +123,13 @@ function FilesTool({ root }: { root: string }): ReactNode {
           disabled={path === root}
           onClick={() => parent !== undefined && setPath(parent)}
           type="button"
-          aria-label="Parent folder"
+          aria-label={t("ui.files.parent")}
         >←</button>
         <span>{path === root ? root : path.slice(root.length) || "/"}</span>
       </div>
       <div className="files-content">
-        <div className="file-list" aria-label="Files">
-          {loading && <p className="muted-state">Loading…</p>}
+        <div className="file-list" aria-label={t("ui.files.list")}>
+          {loading && <p className="muted-state">{t("ui.files.loading")}</p>}
           {!loading && entries.map((entry) => (
             <button className="file-row" key={entry.path} onClick={() => choose(entry)} type="button">
               <span aria-hidden="true">{entry.kind === "directory" || entry.targetKind === "directory" ? "▸" : "·"}</span>
@@ -124,17 +139,17 @@ function FilesTool({ root }: { root: string }): ReactNode {
         </div>
         <div className="file-preview">
           {error !== undefined && <p className="error-state">{error}</p>}
-          {error === undefined && preview === undefined && <p className="muted-state">Select a file to preview</p>}
+          {error === undefined && preview === undefined && <p className="muted-state">{t("ui.files.select")}</p>}
           {preview?.kind === "text" && <pre>{preview.content}</pre>}
           {preview?.kind === "image" && <img src={preview.dataUrl} alt={preview.name} />}
-          {preview?.kind === "unsupported" && <p className="muted-state">Preview unavailable for this file.</p>}
+          {preview?.kind === "unsupported" && <p className="muted-state">{t("ui.files.previewUnavailable")}</p>}
         </div>
       </div>
     </div>
   );
 }
 
-function TerminalTool({ cwd }: { cwd: string }): ReactNode {
+function TerminalTool({ cwd, t }: { cwd: string; t: Translate }): ReactNode {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [error, setError] = useState<string>();
 
@@ -166,7 +181,7 @@ function TerminalTool({ cwd }: { cwd: string }): ReactNode {
     const deliver = (event: TerminalEvent): void => {
       if (event.type === "data") terminal.write(event.data);
       else if (event.type === "exit") {
-        terminal.write(`\r\n\x1b[2mProcess exited (${String(event.exitCode ?? "?")})\x1b[0m\r\n`);
+        terminal.write(`\r\n\x1b[2m${t("ui.terminal.exit", { code: String(event.exitCode ?? "?") })}\x1b[0m\r\n`);
       } else {
         terminal.write(`\r\n\x1b[31m${event.message}\x1b[0m\r\n`);
       }
@@ -212,7 +227,7 @@ function TerminalTool({ cwd }: { cwd: string }): ReactNode {
       unsubscribe();
       terminal.dispose();
     };
-  }, [cwd]);
+  }, [cwd, t]);
 
   return (
     <div className="terminal-tool">
@@ -227,7 +242,7 @@ interface OruWebviewElement extends HTMLElement {
   reload(): void;
 }
 
-function WebTool(): ReactNode {
+function WebTool({ t }: { t: Translate }): ReactNode {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<OruWebviewElement | undefined>(undefined);
   const [input, setInput] = useState("https://example.com");
@@ -255,7 +270,7 @@ function WebTool(): ReactNode {
     const candidate = /^https?:\/\//iu.test(input) ? input : `https://${input}`;
     const normalized = normalizeWebTabUrl(candidate);
     if (normalized === undefined) {
-      setError("Enter a credential-free HTTP(S) URL.");
+      setError(t("ui.web.invalid"));
       return;
     }
     setInput(normalized);
@@ -268,9 +283,9 @@ function WebTool(): ReactNode {
   return (
     <div className="web-tool">
       <form className="web-address" onSubmit={(event) => { event.preventDefault(); navigate(); }}>
-        <button className="icon-button" onClick={() => viewRef.current?.reload()} type="button" aria-label="Reload">↻</button>
-        <input value={input} onChange={(event) => setInput(event.currentTarget.value)} aria-label="Web address" />
-        <button className="compact-button" type="submit">Go</button>
+        <button className="icon-button" onClick={() => viewRef.current?.reload()} type="button" aria-label={t("ui.web.reload")}>↻</button>
+        <input value={input} onChange={(event) => setInput(event.currentTarget.value)} aria-label={t("ui.web.address")} />
+        <button className="compact-button" type="submit">{t("ui.web.go")}</button>
       </form>
       {error !== undefined && <p className="error-state">{error}</p>}
       <div className="web-tool__host" ref={hostRef} />

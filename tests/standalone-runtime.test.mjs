@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { DemoAgentRuntime } from "../desktop/renderer/agent-runtime.ts";
 import { parseDesktopWorkspace } from "../desktop/standalone-contract.ts";
+import { translateDesktop } from "../desktop/i18n.ts";
 
 const workspace = Object.freeze({
   id: "workspace-test",
@@ -43,5 +44,18 @@ test("demo runtime exposes the same session boundary as future adapters", () => 
   assert.ok(updates >= 3);
 
   unsubscribe();
+  runtime.dispose();
+});
+
+test("standalone UI and demo runtime ship Chinese copy", () => {
+  assert.equal(translateDesktop("zh", "ui.command.openFolder"), "打开文件夹");
+  assert.equal(translateDesktop("zh", "ui.tools.terminal"), "终端");
+  assert.match(translateDesktop("zh", "ui.welcome.lede"), /文件/u);
+
+  const runtime = new DemoAgentRuntime("zh");
+  runtime.createSession(workspace);
+  const session = runtime.getSnapshot().sessions[0];
+  assert.equal(session?.title, "新会话");
+  assert.match(session?.messages[0]?.content ?? "", /已在 demo-project 中就绪/u);
   runtime.dispose();
 });

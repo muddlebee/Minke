@@ -14,6 +14,13 @@ async function requireFile(path: string): Promise<number> {
   return details.size;
 }
 
+async function requireExecutable(path: string): Promise<void> {
+  const details = await lstat(path);
+  if (!details.isFile() || (details.mode & 0o111) === 0) {
+    throw new Error(`required package executable is missing: ${path}`);
+  }
+}
+
 async function requireMissing(path: string): Promise<void> {
   try {
     await lstat(path);
@@ -112,5 +119,13 @@ export async function verifyStandalonePackage(
     }
   }
   if (!nativeFound) throw new Error("standalone package is missing the node-pty native module");
+  if (platform === "darwin") {
+    await requireExecutable(join(
+      nativeRoot,
+      "prebuilds",
+      `darwin-${arch}`,
+      "spawn-helper",
+    ));
+  }
   return { appBytes, entries: entries.length };
 }

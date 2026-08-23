@@ -1,4 +1,6 @@
 import type { DesktopWorkspace } from "@minke/desktop/standalone-contract";
+import { translateDesktop } from "@minke/desktop/i18n";
+import type { DesktopLocale } from "@minke/desktop/locale-contract";
 
 export type AgentMessageRole = "user" | "assistant";
 export type AgentRunStatus = "idle" | "thinking" | "running-tool";
@@ -61,6 +63,11 @@ export class DemoAgentRuntime implements AgentRuntime {
   #listeners = new Set<() => void>();
   #timers = new Map<string, Set<ReturnType<typeof setTimeout>>>();
   #sequence = 0;
+  readonly #locale: DesktopLocale;
+
+  constructor(locale: DesktopLocale = "en") {
+    this.#locale = locale;
+  }
 
   getSnapshot = (): AgentRuntimeSnapshot => this.#snapshot;
 
@@ -74,13 +81,15 @@ export class DemoAgentRuntime implements AgentRuntime {
     const session: AgentSession = {
       id,
       workspaceId: workspace.id,
-      title: "New session",
+      title: translateDesktop(this.#locale, "demo.newSession"),
       status: "idle",
       activities: [],
       messages: [{
         id: this.#id("message"),
         role: "assistant",
-        content: `Ready in ${workspace.name}. I’m the built-in scripted demo, so I can show Oru’s interaction states without running an agent harness.`,
+        content: translateDesktop(this.#locale, "demo.ready", {
+          workspace: workspace.name,
+        }),
         createdAt: Date.now(),
       }],
     };
@@ -112,8 +121,8 @@ export class DemoAgentRuntime implements AgentRuntime {
       status: "thinking",
       activities: [{
         id: this.#id("activity"),
-        label: "Thinking",
-        detail: "Understanding the request",
+        label: translateDesktop(this.#locale, "demo.thinking"),
+        detail: translateDesktop(this.#locale, "demo.understanding"),
         state: "active",
       }],
       messages: [...session.messages, {
@@ -135,8 +144,8 @@ export class DemoAgentRuntime implements AgentRuntime {
           })),
           {
             id: this.#id("activity"),
-            label: "Inspect workspace",
-            detail: "Reading the project structure",
+            label: translateDesktop(this.#locale, "demo.inspect"),
+            detail: translateDesktop(this.#locale, "demo.reading"),
             state: "active",
           },
         ],
@@ -153,7 +162,7 @@ export class DemoAgentRuntime implements AgentRuntime {
         messages: [...session.messages, {
           id: this.#id("message"),
           role: "assistant",
-          content: "This is the standalone Oru UI responding through the AgentRuntime boundary. A Pi or Hermes adapter can replace this demo runtime while keeping the conversation, workspace, and tool surfaces unchanged.",
+          content: translateDesktop(this.#locale, "demo.response"),
           createdAt: Date.now(),
         }],
       }));
@@ -174,7 +183,7 @@ export class DemoAgentRuntime implements AgentRuntime {
       messages: [...session.messages, {
         id: this.#id("message"),
         role: "assistant",
-        content: "Run stopped.",
+        content: translateDesktop(this.#locale, "demo.stopped"),
         createdAt: Date.now(),
         interrupted: true,
       }],

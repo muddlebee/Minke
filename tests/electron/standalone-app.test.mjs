@@ -95,7 +95,7 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   await invokeShortcut("sidebar.toggle");
   await page.waitForFunction(() => document.querySelector("main.app-shell")?.getAttribute("data-sidebar-open") === "true");
   assert.equal(await page.locator("main.app-shell").getAttribute("data-sidebar-open"), "true");
-  await page.getByRole("button", { name: "Open Folder" }).first().click();
+  await page.getByRole("button", { name: /Open (?:a )?folder/iu }).first().click();
   await page.getByText(fixtureRoot, { exact: true }).first().waitFor();
   await page.getByText(/Ready in/u).waitFor();
 
@@ -129,7 +129,7 @@ test("standalone Electron shell supports the primary workspace workflow", { time
     /slow-preview-marker/u,
   );
 
-  await page.getByRole("button", { name: /Open Folder/u }).first().click();
+  await page.getByRole("button", { name: /Open (?:a )?folder/iu }).first().click();
   await page.getByText(secondFixtureRoot, { exact: true }).first().waitFor();
   await page.getByRole("button", { name: "second.txt" }).waitFor();
   await page.locator(".sidebar-row", { hasText: basename(fixtureRoot) }).click();
@@ -184,4 +184,26 @@ test("standalone Electron shell supports the primary workspace workflow", { time
 
   await page.screenshot({ path: join(artifacts, "standalone-workspace.png") });
   assert.deepEqual(rendererErrors, [], `renderer errors:\n${rendererErrors.join("\n")}`);
+});
+
+test("standalone Electron shell renders its Chinese locale", { timeout: 45_000 }, async (t) => {
+  const electronApp = await electron.launch({
+    executablePath: electronPath,
+    args: [projectRoot, "--lang=zh-CN"],
+    cwd: projectRoot,
+    env: { ...process.env, NODE_ENV: "test" },
+    timeout: 30_000,
+  });
+  t.after(() => electronApp.close().catch(() => {}));
+  const page = await electronApp.firstWindow();
+  await page.getByRole("heading", { name: /专注服务于.*编码 Agent/u }).waitFor();
+  await electronApp.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0]?.webContents.send(
+      "oru:shortcut:invoke",
+      "palette.open",
+    );
+  });
+  const palette = page.getByRole("dialog", { name: "命令面板" });
+  await palette.waitFor();
+  await palette.getByRole("button", { name: /打开文件夹/u }).waitFor();
 });

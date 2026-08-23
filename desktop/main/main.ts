@@ -293,7 +293,9 @@ async function bootstrap(): Promise<void> {
   }
   app.on("second-instance", showMainWindow);
   await app.whenReady();
-  desktopLocale = new DesktopLocaleRuntime(resolveDesktopLocale(app.getLocale()));
+  desktopLocale = new DesktopLocaleRuntime(resolveDesktopLocale(
+    app.commandLine.getSwitchValue("lang") || app.getLocale(),
+  ));
   installPermissionPolicy();
   const oruConfig = new OruConfigStore(app.getPath("userData"));
   let shortcutBindings: ShortcutBindings = {};

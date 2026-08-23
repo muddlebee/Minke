@@ -41,3 +41,16 @@ test("package CI verifies Electron interactions without staging a legacy runtime
   assert.doesNotMatch(workflow, /submodules:\s*recursive/u);
   assert.doesNotMatch(workflow, /vendor\/deepseek-harness install/u);
 });
+
+test("macOS packaging unpacks and verifies node-pty's executable helper", async () => {
+  const [forge, verifier] = await Promise.all([
+    readFile(new URL("../forge.config.ts", import.meta.url), "utf8"),
+    readFile(
+      new URL("../scripts/forge/standalone-artifact.ts", import.meta.url),
+      "utf8",
+    ),
+  ]);
+  assert.match(forge, /\{\*\.node,spawn-helper\}/u);
+  assert.match(forge, /chmod\(join\(prebuilds, target, "spawn-helper"\), 0o755\)/u);
+  assert.match(verifier, /requireExecutable\(join\([\s\S]*?"spawn-helper"/u);
+});

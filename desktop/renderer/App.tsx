@@ -11,6 +11,11 @@ import {
   type ReactNode,
 } from "react";
 import type { DesktopLocale } from "@minke/desktop/locale-contract";
+import {
+  translateDesktop,
+  type DesktopMessageKey,
+  type DesktopTranslateParams,
+} from "@minke/desktop/i18n";
 import type { DesktopWorkspace } from "@minke/desktop/standalone-contract";
 import {
   DemoAgentRuntime,
@@ -30,6 +35,10 @@ export interface AppProps {
 }
 
 type ThemePreference = "system" | "light" | "dark";
+type Translate = (
+  key: DesktopMessageKey,
+  params?: DesktopTranslateParams,
+) => string;
 const THEME_STORAGE_KEY = "oru.ui.theme.v1";
 
 function useRuntime(runtime: AgentRuntime) {
@@ -43,8 +52,8 @@ function useRuntime(runtime: AgentRuntime) {
 
 export default function App({ locale, runtime: providedRuntime }: AppProps): ReactNode {
   const runtime = useMemo(
-    () => providedRuntime ?? new DemoAgentRuntime(),
-    [providedRuntime],
+    () => providedRuntime ?? new DemoAgentRuntime(locale),
+    [locale, providedRuntime],
   );
   const snapshot = useRuntime(runtime);
   const [workspaces, setWorkspaces] = useState<readonly DesktopWorkspace[]>([]);
@@ -63,6 +72,14 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
   const primaryModifier = window.oruDesktop.about.platform === "darwin"
     ? "⌘"
     : "Ctrl+";
+  const t = useCallback(
+    (key: DesktopMessageKey, params?: DesktopTranslateParams) =>
+      translateDesktop(locale, key, params),
+    [locale],
+  );
+  const runtimeLabel = runtime.kind === "demo"
+    ? t("ui.runtime.demo")
+    : runtime.label;
 
   useEffect(
     () => () => {
@@ -166,7 +183,8 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
           sessions={snapshot.sessions}
           activeWorkspaceId={activeWorkspaceId}
           activeSessionId={snapshot.activeSessionId}
-          runtimeLabel={runtime.label}
+          runtimeLabel={runtimeLabel}
+          t={t}
           onOpenWorkspace={() => void openWorkspace()}
           onSelectWorkspace={(workspace) => {
             setActiveWorkspaceId(workspace.id);
@@ -180,11 +198,11 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
       )}
       <section className="conversation-pane">
         <header className="conversation-header">
-          <div><h1>{activeSession?.title ?? "Oru"}</h1><p>{activeWorkspace?.path ?? "Agent workspace"}</p></div>
+          <div><h1>{activeSession?.title ?? "Oru"}</h1><p>{activeWorkspace?.path ?? t("ui.agentWorkspace")}</p></div>
           <div className="header-actions">
-            <span className="runtime-badge"><span />{runtime.label}</span>
+            <span className="runtime-badge"><span />{runtimeLabel}</span>
             <button className="compact-button" disabled={activeWorkspace === undefined} onClick={() => setToolsOpen((value) => !value)} type="button">
-              {toolsOpen ? "Hide tools" : "Show tools"}
+              {toolsOpen ? t("ui.tools.hide") : t("ui.tools.show")}
             </button>
           </div>
         </header>
@@ -192,13 +210,15 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
           ? <Welcome
               openShortcut={`${primaryModifier}O`}
               onOpen={() => void openWorkspace()}
+              t={t}
             />
-          : <Conversation session={activeSession} runtime={runtime} />}
+          : <Conversation session={activeSession} runtime={runtime} t={t} />}
       </section>
       {toolsOpen && activeWorkspace !== undefined && (
-        <Suspense fallback={<aside className="tool-panel"><p className="muted-state">Loading tools…</p></aside>}>
+        <Suspense fallback={<aside className="tool-panel"><p className="muted-state">{t("ui.tools.loading")}</p></aside>}>
           <ToolPanel
             key={activeWorkspace.id}
+            locale={locale}
             workspace={activeWorkspace}
             onClose={() => setToolsOpen(false)}
           />
@@ -208,6 +228,7 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
         <CommandPalette
           canCreateSession={activeWorkspace !== undefined}
           primaryModifier={primaryModifier}
+          t={t}
           toolsOpen={toolsOpen}
           onClose={() => setPaletteOpen(false)}
           onOpenWorkspace={() => {
@@ -231,7 +252,8 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
       {settingsOpen && (
         <SettingsDialog
           locale={locale}
-          runtimeLabel={runtime.label}
+          runtimeLabel={runtimeLabel}
+          t={t}
           theme={theme}
           onTheme={setTheme}
           onClose={() => setSettingsOpen(false)}
@@ -244,6 +266,7 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
 function CommandPalette(props: {
   canCreateSession: boolean;
   primaryModifier: string;
+  t: Translate;
   toolsOpen: boolean;
   onClose(): void;
   onOpenWorkspace(): void;
@@ -252,15 +275,15 @@ function CommandPalette(props: {
   onOpenSettings(): void;
 }): ReactNode {
   const actions = [
-    { label: "Open folder", shortcut: `${props.primaryModifier}O`, run: props.onOpenWorkspace },
-    { label: "New session", shortcut: `${props.primaryModifier}N`, run: props.onNewSession, disabled: !props.canCreateSession },
-    { label: props.toolsOpen ? "Hide tools" : "Show tools", shortcut: `${props.primaryModifier}P`, run: props.onToggleTools },
-    { label: "Settings", shortcut: `${props.primaryModifier},`, run: props.onOpenSettings },
+    { label: props.t("ui.command.openFolder"), shortcut: `${props.primaryModifier}O`, run: props.onOpenWorkspace },
+    { label: props.t("ui.command.newSession"), shortcut: `${props.primaryModifier}N`, run: props.onNewSession, disabled: !props.canCreateSession },
+    { label: props.toolsOpen ? props.t("ui.tools.hide") : props.t("ui.tools.show"), shortcut: `${props.primaryModifier}P`, run: props.onToggleTools },
+    { label: props.t("ui.command.settings"), shortcut: `${props.primaryModifier},`, run: props.onOpenSettings },
   ];
   return (
     <div className="dialog-backdrop command-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && props.onClose()}>
-      <section className="command-palette" role="dialog" aria-modal="true" aria-label="Command palette">
-        <header><span>Run a command</span><kbd>Esc</kbd></header>
+      <section className="command-palette" role="dialog" aria-modal="true" aria-label={props.t("ui.command.palette")}>
+        <header><span>{props.t("ui.command.run")}</span><kbd>Esc</kbd></header>
         <div>
           {actions.map((action, index) => (
             <button autoFocus={index === 0} disabled={action.disabled} key={action.label} onClick={action.run} type="button">
@@ -279,6 +302,7 @@ function Sidebar(props: {
   activeWorkspaceId?: string;
   activeSessionId?: string;
   runtimeLabel: string;
+  t: Translate;
   onOpenWorkspace(): void;
   onSelectWorkspace(workspace: DesktopWorkspace): void;
   onSelectSession(sessionId: string): void;
@@ -289,11 +313,11 @@ function Sidebar(props: {
   return (
     <aside className="sidebar">
       <div className="sidebar__brand"><img src="./oru.svg" alt="" /><strong>Oru</strong></div>
-      <button className="primary-button" onClick={props.onOpenWorkspace} type="button"><span aria-hidden="true">＋</span> Open Folder</button>
+      <button className="primary-button" onClick={props.onOpenWorkspace} type="button"><span aria-hidden="true">＋</span> {props.t("ui.command.openFolder")}</button>
       <div className="sidebar__section">
-        <div className="section-label"><span>Workspaces</span><span>{props.workspaces.length}</span></div>
+        <div className="section-label"><span>{props.t("ui.sidebar.workspaces")}</span><span>{props.workspaces.length}</span></div>
         <div className="sidebar-list">
-          {props.workspaces.length === 0 && <p className="sidebar-empty">Folders you open appear here for this launch.</p>}
+          {props.workspaces.length === 0 && <p className="sidebar-empty">{props.t("ui.sidebar.empty")}</p>}
           {props.workspaces.map((workspace) => (
             <button className="sidebar-row" data-active={workspace.id === props.activeWorkspaceId} key={workspace.id} onClick={() => props.onSelectWorkspace(workspace)} type="button">
               <span className="workspace-mark">{workspace.name.slice(0, 1).toUpperCase()}</span>
@@ -304,7 +328,7 @@ function Sidebar(props: {
       </div>
       {props.activeWorkspaceId !== undefined && (
         <div className="sidebar__section sidebar__section--sessions">
-          <div className="section-label"><span>Sessions</span><button className="section-add" onClick={props.onNewSession} type="button" aria-label="New session">＋</button></div>
+          <div className="section-label"><span>{props.t("ui.sidebar.sessions")}</span><button className="section-add" onClick={props.onNewSession} type="button" aria-label={props.t("ui.sidebar.newSession")}>＋</button></div>
           <div className="sidebar-list">
             {visibleSessions.map((session) => (
               <button className="session-row" data-active={session.id === props.activeSessionId} key={session.id} onClick={() => props.onSelectSession(session.id)} type="button">
@@ -315,7 +339,7 @@ function Sidebar(props: {
         </div>
       )}
       <div className="sidebar__footer">
-        <button className="sidebar-footer-button" onClick={props.onOpenSettings} type="button">⚙ <span>Settings</span></button>
+        <button className="sidebar-footer-button" onClick={props.onOpenSettings} type="button">⚙ <span>{props.t("ui.settings.title")}</span></button>
         <span className="sidebar-runtime">{props.runtimeLabel}</span>
       </div>
     </aside>
@@ -325,23 +349,24 @@ function Sidebar(props: {
 function Welcome(props: {
   openShortcut: string;
   onOpen(): void;
+  t: Translate;
 }): ReactNode {
   return (
     <div className="welcome">
       <div className="welcome__symbol">O</div>
-      <p className="eyebrow">HARNESS-NEUTRAL DESKTOP</p>
-      <h2>A focused home for<br />your coding agents.</h2>
-      <p className="welcome__lede">Open a project to explore the standalone conversation shell, files, terminal, and web tools.</p>
-      <button className="primary-button primary-button--large" onClick={props.onOpen} type="button">Open a folder <span>{props.openShortcut}</span></button>
+      <p className="eyebrow">{props.t("ui.welcome.eyebrow")}</p>
+      <h2>{props.t("ui.welcome.titleFirst")}<br />{props.t("ui.welcome.titleSecond")}</h2>
+      <p className="welcome__lede">{props.t("ui.welcome.lede")}</p>
+      <button className="primary-button primary-button--large" onClick={props.onOpen} type="button">{props.t("ui.welcome.openFolder")} <span>{props.openShortcut}</span></button>
       <div className="welcome__details">
-        <span><b>Local tools</b> Files and terminal stay on your machine</span>
-        <span><b>Adapter ready</b> Built for Pi, Hermes, and future runtimes</span>
+        <span><b>{props.t("ui.welcome.localTools")}</b> {props.t("ui.welcome.localToolsDetail")}</span>
+        <span><b>{props.t("ui.welcome.adapterReady")}</b> {props.t("ui.welcome.adapterReadyDetail")}</span>
       </div>
     </div>
   );
 }
 
-function Conversation({ session, runtime }: { session: AgentSession; runtime: AgentRuntime }): ReactNode {
+function Conversation({ session, runtime, t }: { session: AgentSession; runtime: AgentRuntime; t: Translate }): ReactNode {
   const [prompt, setPrompt] = useState("");
   const endRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -358,12 +383,12 @@ function Conversation({ session, runtime }: { session: AgentSession; runtime: Ag
       <div className="message-scroll"><div className="message-list">
         {session.messages.map((message) => (
           <article className="message" data-role={message.role} key={message.id}>
-            <div className="message__avatar">{message.role === "assistant" ? "O" : "YOU"}</div>
-            <div className="message__body"><div className="message__meta">{message.role === "assistant" ? "Oru" : "You"}{message.interrupted ? " · interrupted" : ""}</div><p>{message.content}</p></div>
+            <div className="message__avatar">{message.role === "assistant" ? "O" : t("ui.message.you").toUpperCase()}</div>
+            <div className="message__body"><div className="message__meta">{message.role === "assistant" ? "Oru" : t("ui.message.you")}{message.interrupted ? ` · ${t("ui.message.interrupted")}` : ""}</div><p>{message.content}</p></div>
           </article>
         ))}
         {session.activities.length > 0 && (
-          <div className="activity-card" aria-label="Agent activity">
+          <div className="activity-card" aria-label={t("ui.message.activity")}>
             {session.activities.map((item) => (
               <div className="activity-row" data-state={item.state} key={item.id}>
                 <span>{item.state === "complete" ? "✓" : item.state === "interrupted" ? "×" : "·"}</span>
@@ -375,17 +400,17 @@ function Conversation({ session, runtime }: { session: AgentSession; runtime: Ag
         <div ref={endRef} />
       </div></div>
       <form className="composer" onSubmit={submit}>
-        <textarea aria-label="Message" placeholder="Ask Oru about this project…" value={prompt} onChange={(event) => setPrompt(event.currentTarget.value)} onKeyDown={(event) => {
+        <textarea aria-label={t("ui.composer.message")} placeholder={t("ui.composer.placeholder")} value={prompt} onChange={(event) => setPrompt(event.currentTarget.value)} onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
             event.currentTarget.form?.requestSubmit();
           }
         }} />
         <div className="composer__footer">
-          <span>Scripted demo · Enter to send · Shift+Enter for newline</span>
+          <span>{t("ui.composer.hint")}</span>
           {session.status === "idle"
-            ? <button className="send-button" disabled={prompt.trim() === ""} type="submit" aria-label="Send">↑</button>
-            : <button className="stop-button" onClick={() => runtime.abort(session.id)} type="button">■ Stop</button>}
+            ? <button className="send-button" disabled={prompt.trim() === ""} type="submit" aria-label={t("ui.composer.send")}>↑</button>
+            : <button className="stop-button" onClick={() => runtime.abort(session.id)} type="button">■ {t("ui.composer.stop")}</button>}
         </div>
       </form>
     </div>
@@ -395,6 +420,7 @@ function Conversation({ session, runtime }: { session: AgentSession; runtime: Ag
 function SettingsDialog(props: {
   locale: DesktopLocale;
   runtimeLabel: string;
+  t: Translate;
   theme: ThemePreference;
   onTheme(theme: ThemePreference): void;
   onClose(): void;
@@ -402,12 +428,12 @@ function SettingsDialog(props: {
   return (
     <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && props.onClose()}>
       <section className="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-        <header><div><p className="eyebrow">PREFERENCES</p><h2 id="settings-title">Settings</h2></div><button className="icon-button" onClick={props.onClose} type="button" aria-label="Close">×</button></header>
-        <div className="settings-section"><div><strong>Appearance</strong><p>Follow the system or choose a fixed theme.</p></div><div className="segmented">
-          {(["system", "light", "dark"] as const).map((item) => <button data-active={props.theme === item} key={item} onClick={() => props.onTheme(item)} type="button">{item}</button>)}
+        <header><div><p className="eyebrow">{props.t("ui.settings.eyebrow")}</p><h2 id="settings-title">{props.t("ui.settings.title")}</h2></div><button className="icon-button" onClick={props.onClose} type="button" aria-label={props.t("ui.settings.close")}>×</button></header>
+        <div className="settings-section"><div><strong>{props.t("ui.settings.appearance")}</strong><p>{props.t("ui.settings.appearanceDetail")}</p></div><div className="segmented">
+          {(["system", "light", "dark"] as const).map((item) => <button data-active={props.theme === item} key={item} onClick={() => props.onTheme(item)} type="button">{props.t(`ui.settings.${item}`)}</button>)}
         </div></div>
-        <div className="settings-section"><div><strong>Language</strong><p>Currently follows the desktop locale.</p></div><span className="settings-value">{props.locale === "zh" ? "简体中文" : "English"}</span></div>
-        <div className="settings-section"><div><strong>Runtime</strong><p>Implement AgentRuntime to connect another harness.</p></div><span className="runtime-badge"><span />{props.runtimeLabel}</span></div>
+        <div className="settings-section"><div><strong>{props.t("ui.settings.language")}</strong><p>{props.t("ui.settings.languageDetail")}</p></div><span className="settings-value">{props.locale === "zh" ? props.t("ui.settings.chinese") : props.t("ui.settings.english")}</span></div>
+        <div className="settings-section"><div><strong>{props.t("ui.settings.runtime")}</strong><p>{props.t("ui.settings.runtimeDetail")}</p></div><span className="runtime-badge"><span />{props.runtimeLabel}</span></div>
         <footer>Oru {window.oruDesktop.about.version} · {window.oruDesktop.about.platform} {window.oruDesktop.about.arch}</footer>
       </section>
     </div>
