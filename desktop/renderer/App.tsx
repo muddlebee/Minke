@@ -60,6 +60,9 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
   });
   const activeWorkspace = workspaces.find((item) => item.id === activeWorkspaceId);
   const activeSession = snapshot.sessions.find((item) => item.id === snapshot.activeSessionId);
+  const primaryModifier = window.oruDesktop.about.platform === "darwin"
+    ? "⌘"
+    : "Ctrl+";
 
   useEffect(
     () => () => {
@@ -186,7 +189,10 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
           </div>
         </header>
         {activeWorkspace === undefined || activeSession === undefined
-          ? <Welcome onOpen={() => void openWorkspace()} />
+          ? <Welcome
+              openShortcut={`${primaryModifier}O`}
+              onOpen={() => void openWorkspace()}
+            />
           : <Conversation session={activeSession} runtime={runtime} />}
       </section>
       {toolsOpen && activeWorkspace !== undefined && (
@@ -201,6 +207,7 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
       {paletteOpen && (
         <CommandPalette
           canCreateSession={activeWorkspace !== undefined}
+          primaryModifier={primaryModifier}
           toolsOpen={toolsOpen}
           onClose={() => setPaletteOpen(false)}
           onOpenWorkspace={() => {
@@ -236,6 +243,7 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
 
 function CommandPalette(props: {
   canCreateSession: boolean;
+  primaryModifier: string;
   toolsOpen: boolean;
   onClose(): void;
   onOpenWorkspace(): void;
@@ -244,10 +252,10 @@ function CommandPalette(props: {
   onOpenSettings(): void;
 }): ReactNode {
   const actions = [
-    { label: "Open folder", shortcut: "⌘O", run: props.onOpenWorkspace },
-    { label: "New session", shortcut: "⌘N", run: props.onNewSession, disabled: !props.canCreateSession },
-    { label: props.toolsOpen ? "Hide tools" : "Show tools", shortcut: "⌘P", run: props.onToggleTools },
-    { label: "Settings", shortcut: "⌘,", run: props.onOpenSettings },
+    { label: "Open folder", shortcut: `${props.primaryModifier}O`, run: props.onOpenWorkspace },
+    { label: "New session", shortcut: `${props.primaryModifier}N`, run: props.onNewSession, disabled: !props.canCreateSession },
+    { label: props.toolsOpen ? "Hide tools" : "Show tools", shortcut: `${props.primaryModifier}P`, run: props.onToggleTools },
+    { label: "Settings", shortcut: `${props.primaryModifier},`, run: props.onOpenSettings },
   ];
   return (
     <div className="dialog-backdrop command-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && props.onClose()}>
@@ -314,14 +322,17 @@ function Sidebar(props: {
   );
 }
 
-function Welcome({ onOpen }: { onOpen(): void }): ReactNode {
+function Welcome(props: {
+  openShortcut: string;
+  onOpen(): void;
+}): ReactNode {
   return (
     <div className="welcome">
       <div className="welcome__symbol">O</div>
       <p className="eyebrow">HARNESS-NEUTRAL DESKTOP</p>
       <h2>A focused home for<br />your coding agents.</h2>
       <p className="welcome__lede">Open a project to explore the standalone conversation shell, files, terminal, and web tools.</p>
-      <button className="primary-button primary-button--large" onClick={onOpen} type="button">Open a folder <span>⌘O</span></button>
+      <button className="primary-button primary-button--large" onClick={props.onOpen} type="button">Open a folder <span>{props.openShortcut}</span></button>
       <div className="welcome__details">
         <span><b>Local tools</b> Files and terminal stay on your machine</span>
         <span><b>Adapter ready</b> Built for Pi, Hermes, and future runtimes</span>

@@ -1,5 +1,6 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
+import { normalizeWebTabUrl } from "@minke/harness-overlay/tabs/contract";
 import type { TerminalEvent } from "@minke/harness-overlay/tabs/terminal-contract";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { DesktopWorkspace } from "@minke/desktop/standalone-contract";
@@ -61,6 +62,7 @@ function FilesTool({ root }: { root: string }): ReactNode {
   const [preview, setPreview] = useState<FileManagerPreviewResult>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
+  const previewRequest = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -80,14 +82,22 @@ function FilesTool({ root }: { root: string }): ReactNode {
   }, [path]);
 
   const choose = (entry: FileManagerEntry): void => {
+    const request = ++previewRequest.current;
+    setPreview(undefined);
+    setError(undefined);
     if (entry.kind === "directory" || entry.targetKind === "directory") {
       setPath(entry.path);
       return;
     }
-    setError(undefined);
     void window.oruDesktop.files.preview({ path: entry.path })
-      .then(setPreview)
-      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason)));
+      .then((result) => {
+        if (previewRequest.current === request) setPreview(result);
+      })
+      .catch((reason: unknown) => {
+        if (previewRequest.current === request) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      });
   };
 
   return (
@@ -243,9 +253,14 @@ function WebTool(): ReactNode {
 
   const navigate = (): void => {
     const candidate = /^https?:\/\//iu.test(input) ? input : `https://${input}`;
-    setInput(candidate);
+    const normalized = normalizeWebTabUrl(candidate);
+    if (normalized === undefined) {
+      setError("Enter a credential-free HTTP(S) URL.");
+      return;
+    }
+    setInput(normalized);
     setError(undefined);
-    void viewRef.current?.loadURL(candidate).catch((reason: unknown) => {
+    void viewRef.current?.loadURL(normalized).catch((reason: unknown) => {
       setError(reason instanceof Error ? reason.message : String(reason));
     });
   };

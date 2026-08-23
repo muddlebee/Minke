@@ -35,6 +35,9 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   const fixtureRoot = await mkdtemp(join(tmpdir(), "oru-electron-"));
   const secondFixtureRoot = await mkdtemp(join(tmpdir(), "oru-electron-second-"));
   await writeFile(join(fixtureRoot, "hello.txt"), "oru-file-preview-marker\n", "utf8");
+  const slowPreview = Buffer.alloc(8 * 1_024 * 1_024, "x");
+  slowPreview.write("slow-preview-marker\n");
+  await writeFile(join(fixtureRoot, "slow.txt"), slowPreview);
   await mkdir(join(fixtureRoot, "src"));
   await writeFile(join(fixtureRoot, "src", "index.ts"), "export const ready = true;\n", "utf8");
   await writeFile(join(secondFixtureRoot, "second.txt"), "second-workspace-marker\n", "utf8");
@@ -81,7 +84,9 @@ test("standalone Electron shell supports the primary workspace workflow", { time
 
   await page.getByRole("heading", { name: /A focused home for your coding agents/u }).waitFor();
   await invokeShortcut("palette.open");
-  await page.getByRole("dialog", { name: "Command palette" }).waitFor();
+  const palette = page.getByRole("dialog", { name: "Command palette" });
+  await palette.waitFor();
+  await palette.getByText(process.platform === "darwin" ? "⌘O" : "Ctrl+O").waitFor();
   await page.keyboard.press("Escape");
   await page.getByRole("dialog", { name: "Command palette" }).waitFor({ state: "hidden" });
   await invokeShortcut("sidebar.toggle");
@@ -107,8 +112,22 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   await page.waitForFunction(() => document.querySelector(".session-row")?.getAttribute("data-active") === "true");
   assert.equal(await page.locator(".session-row").first().getAttribute("data-active"), "true");
 
-  await page.getByRole("button", { name: "hello.txt" }).click();
+  await page.evaluate(() => {
+    const rows = [...document.querySelectorAll(".file-row")];
+    const slow = rows.find((row) => row.textContent?.includes("slow.txt"));
+    const quick = rows.find((row) => row.textContent?.includes("hello.txt"));
+    if (!(slow instanceof HTMLElement) || !(quick instanceof HTMLElement)) {
+      throw new Error("preview race fixtures are missing");
+    }
+    slow.click();
+    quick.click();
+  });
   await page.getByText("oru-file-preview-marker", { exact: false }).waitFor();
+  await page.waitForTimeout(300);
+  assert.doesNotMatch(
+    await page.locator(".file-preview").textContent() ?? "",
+    /slow-preview-marker/u,
+  );
 
   await page.getByRole("button", { name: /Open Folder/u }).first().click();
   await page.getByText(secondFixtureRoot, { exact: true }).first().waitFor();
@@ -153,6 +172,9 @@ test("standalone Electron shell supports the primary workspace workflow", { time
 
   await page.getByRole("tab", { name: "Web" }).click();
   const address = page.getByRole("textbox", { name: "Web address" });
+  await address.fill("https://user:secret@example.com/");
+  await page.getByRole("button", { name: "Go" }).click();
+  await page.getByText("Enter a credential-free HTTP(S) URL.").waitFor();
   await address.fill(server.url);
   await page.getByRole("button", { name: "Go" }).click();
   await page.waitForFunction((expected) => {
