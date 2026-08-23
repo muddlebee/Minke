@@ -79,6 +79,17 @@ function FilesTool({ root, t }: { root: string; t: Translate }): ReactNode {
   const [error, setError] = useState<string>();
   const previewRequest = useRef(0);
 
+  useEffect(() => () => {
+    previewRequest.current += 1;
+  }, []);
+
+  const navigateTo = (nextPath: string): void => {
+    previewRequest.current += 1;
+    setPreview(undefined);
+    setError(undefined);
+    setPath(nextPath);
+  };
+
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -101,7 +112,7 @@ function FilesTool({ root, t }: { root: string; t: Translate }): ReactNode {
     setPreview(undefined);
     setError(undefined);
     if (entry.kind === "directory" || entry.targetKind === "directory") {
-      setPath(entry.path);
+      navigateTo(entry.path);
       return;
     }
     void window.oruDesktop.files.preview({ path: entry.path })
@@ -121,7 +132,7 @@ function FilesTool({ root, t }: { root: string; t: Translate }): ReactNode {
         <button
           className="icon-button"
           disabled={path === root}
-          onClick={() => parent !== undefined && setPath(parent)}
+          onClick={() => parent !== undefined && navigateTo(parent)}
           type="button"
           aria-label={t("ui.files.parent")}
         >←</button>
@@ -156,76 +167,103 @@ function TerminalTool({ cwd, t }: { cwd: string; t: Translate }): ReactNode {
   useEffect(() => {
     const host = hostRef.current;
     if (host === null) return;
-    const terminal = new Terminal({
-      cursorBlink: true,
-      fontFamily: "var(--font-mono)",
-      fontSize: 12,
-      lineHeight: 1.25,
-      scrollback: 5_000,
-      theme: terminalTheme(),
-      allowTransparency: true,
-    });
-    const fit = new FitAddon();
-    terminal.loadAddon(fit);
-    terminal.open(host);
-    const themeObserver = new MutationObserver(() => {
-      terminal.options.theme = terminalTheme();
-    });
-    themeObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-theme"],
-    });
     let sessionId: string | undefined;
     let disposed = false;
+    let terminal: Terminal | undefined;
+    let resize: ResizeObserver | undefined;
+    let themeObserver: MutationObserver | undefined;
+    let input: { dispose(): void } | undefined;
+    let unsubscribe: (() => void) | undefined;
     const pending: TerminalEvent[] = [];
-    const deliver = (event: TerminalEvent): void => {
-      if (event.type === "data") terminal.write(event.data);
-      else if (event.type === "exit") {
-        terminal.write(`\r\n\x1b[2m${t("ui.terminal.exit", { code: String(event.exitCode ?? "?") })}\x1b[0m\r\n`);
-      } else {
-        terminal.write(`\r\n\x1b[31m${event.message}\x1b[0m\r\n`);
-      }
-    };
-    const unsubscribe = window.oruDesktop.terminal.subscribe((event) => {
-      if (sessionId === undefined) pending.push(event);
-      else if (event.sessionId === sessionId) deliver(event);
-    });
-    const input = terminal.onData((data) => {
-      if (sessionId !== undefined) window.oruDesktop.terminal.write({ sessionId, data });
-    });
-    const resize = new ResizeObserver(() => {
-      if (host.clientWidth === 0 || host.clientHeight === 0) return;
-      try {
-        fit.fit();
+
+    const start = async (): Promise<void> => {
+      const settings = await window.oruDesktop.terminal.readSettings();
+      if (disposed) return;
+      const activeTerminal = new Terminal({
+        cursorBlink: true,
+        fontFamily: settings.fontFamily || "var(--font-mono)",
+        fontSize: settings.fontSize,
+        lineHeight: settings.lineHeight,
+        scrollback: 5_000,
+        theme: terminalTheme(),
+        allowTransparency: true,
+      });
+      terminal = activeTerminal;
+      const fit = new FitAddon();
+      activeTerminal.loadAddon(fit);
+      activeTerminal.open(host);
+      themeObserver = new MutationObserver(() => {
+        activeTerminal.options.theme = terminalTheme();
+      });
+      themeObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ["data-theme"],
+      });
+      const deliver = (event: TerminalEvent): void => {
+        if (event.type === "data") activeTerminal.write(event.data);
+        else if (event.type === "exit") {
+          activeTerminal.write(`\r\n\x1b[2m${t("ui.terminal.exit", { code: String(event.exitCode ?? "?") })}\x1b[0m\r\n`);
+        } else {
+          activeTerminal.write(`\r\n\x1b[31m${event.message}\x1b[0m\r\n`);
+        }
+      };
+      unsubscribe = window.oruDesktop.terminal.subscribe((event) => {
+        if (sessionId === undefined) pending.push(event);
+        else if (event.sessionId === sessionId) deliver(event);
+      });
+      input = activeTerminal.onData((data) => {
         if (sessionId !== undefined) {
-          window.oruDesktop.terminal.resize({ sessionId, cols: terminal.cols, rows: terminal.rows });
+          window.oruDesktop.terminal.write({ sessionId, data });
         }
-      } catch {
-        // The panel may be hidden during a layout change.
+      });
+      resize = new ResizeObserver(() => {
+        if (host.clientWidth === 0 || host.clientHeight === 0) return;
+        try {
+          fit.fit();
+          if (sessionId !== undefined) {
+            window.oruDesktop.terminal.resize({
+              sessionId,
+              cols: activeTerminal.cols,
+              rows: activeTerminal.rows,
+            });
+          }
+        } catch {
+          // The panel may be hidden during a layout change.
+        }
+      });
+      resize.observe(host);
+      fit.fit();
+      const result = await window.oruDesktop.terminal.create({
+        cwd,
+        cols: activeTerminal.cols,
+        rows: activeTerminal.rows,
+      });
+      if (disposed) {
+        window.oruDesktop.terminal.close(result.sessionId);
+        return;
+      }
+      sessionId = result.sessionId;
+      for (const event of pending) {
+        if (event.sessionId === sessionId) deliver(event);
+      }
+      pending.length = 0;
+      activeTerminal.focus();
+    };
+    void start().catch((reason: unknown) => {
+      if (!disposed) {
+        setError(reason instanceof Error ? reason.message : String(reason));
       }
     });
-    resize.observe(host);
-    fit.fit();
-    void window.oruDesktop.terminal.create({ cwd, cols: terminal.cols, rows: terminal.rows })
-      .then((result) => {
-        if (disposed) {
-          window.oruDesktop.terminal.close(result.sessionId);
-          return;
-        }
-        sessionId = result.sessionId;
-        for (const event of pending) if (event.sessionId === sessionId) deliver(event);
-        pending.length = 0;
-        terminal.focus();
-      })
-      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason)));
     return () => {
       disposed = true;
-      if (sessionId !== undefined) window.oruDesktop.terminal.close(sessionId);
-      themeObserver.disconnect();
-      resize.disconnect();
-      input.dispose();
-      unsubscribe();
-      terminal.dispose();
+      if (sessionId !== undefined) {
+        window.oruDesktop.terminal.close(sessionId);
+      }
+      themeObserver?.disconnect();
+      resize?.disconnect();
+      input?.dispose();
+      unsubscribe?.();
+      terminal?.dispose();
     };
   }, [cwd, t]);
 

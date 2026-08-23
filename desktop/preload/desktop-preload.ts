@@ -212,7 +212,9 @@ const files = Object.freeze({
 
 const terminal = Object.freeze({
   async readSettings(): Promise<unknown> {
-    return await ipcRenderer.invoke(TERMINAL_SETTINGS_READ_CHANNEL);
+    return parseTerminalSettings(
+      await ipcRenderer.invoke(TERMINAL_SETTINGS_READ_CHANNEL),
+    );
   },
   async writeSettings(settings: TerminalSettings): Promise<void> {
     await ipcRenderer.invoke(

@@ -16,6 +16,9 @@ import type {
   TerminalWriteRequest,
 } from "@minke/harness-overlay/tabs/terminal-contract";
 import type {
+  TerminalSettings,
+} from "@minke/harness-overlay/terminal-settings-contract";
+import type {
   WindowColorScheme,
   WindowThemePreference,
 } from "@minke/desktop/window-theme-contract";
@@ -40,6 +43,8 @@ interface OruDesktopApi {
     write(request: FileManagerWriteRequest): Promise<FileManagerWriteResult>;
   };
   readonly terminal: {
+    readSettings(): Promise<TerminalSettings>;
+    writeSettings(settings: TerminalSettings): Promise<void>;
     create(request: TerminalCreateRequest): Promise<TerminalCreateResult>;
     write(request: TerminalWriteRequest): void;
     resize(request: TerminalResizeRequest): void;

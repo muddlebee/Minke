@@ -34,12 +34,14 @@ async function startFixtureServer() {
 test("standalone Electron shell supports the primary workspace workflow", { timeout: 90_000 }, async (t) => {
   const fixtureRoot = await mkdtemp(join(tmpdir(), "oru-electron-"));
   const secondFixtureRoot = await mkdtemp(join(tmpdir(), "oru-electron-second-"));
+  const profileRoot = await mkdtemp(join(tmpdir(), "oru-electron-profile-"));
   await writeFile(join(fixtureRoot, "hello.txt"), "oru-file-preview-marker\n", "utf8");
   const slowPreview = Buffer.alloc(8 * 1_024 * 1_024, "x");
   slowPreview.write("slow-preview-marker\n");
   await writeFile(join(fixtureRoot, "slow.txt"), slowPreview);
   await mkdir(join(fixtureRoot, "src"));
   await writeFile(join(fixtureRoot, "src", "index.ts"), "export const ready = true;\n", "utf8");
+  await writeFile(join(fixtureRoot, "src", "slow-child.txt"), slowPreview);
   await writeFile(join(secondFixtureRoot, "second.txt"), "second-workspace-marker\n", "utf8");
   const server = await startFixtureServer();
   const artifacts = join(projectRoot, "test-results", "electron");
@@ -49,7 +51,12 @@ test("standalone Electron shell supports the primary workspace workflow", { time
     executablePath: electronPath,
     args: [projectRoot],
     cwd: projectRoot,
-    env: { ...process.env, NODE_ENV: "test" },
+    env: {
+      ...process.env,
+      HOME: profileRoot,
+      NODE_ENV: "test",
+      USERPROFILE: profileRoot,
+    },
     timeout: 45_000,
   });
   t.after(async () => {
@@ -57,6 +64,7 @@ test("standalone Electron shell supports the primary workspace workflow", { time
     await server.close().catch(() => {});
     await rm(fixtureRoot, { recursive: true, force: true });
     await rm(secondFixtureRoot, { recursive: true, force: true });
+    await rm(profileRoot, { recursive: true, force: true });
   });
 
   await electronApp.evaluate(({ dialog }, paths) => {
@@ -128,6 +136,24 @@ test("standalone Electron shell supports the primary workspace workflow", { time
     await page.locator(".file-preview").textContent() ?? "",
     /slow-preview-marker/u,
   );
+  await page.getByRole("button", { name: "src" }).click();
+  await page.getByRole("button", { name: "slow-child.txt" }).waitFor();
+  await page.evaluate(() => {
+    const slow = [...document.querySelectorAll(".file-row")]
+      .find((row) => row.textContent?.includes("slow-child.txt"));
+    const parent = document.querySelector(".files-address button");
+    if (!(slow instanceof HTMLElement) || !(parent instanceof HTMLElement)) {
+      throw new Error("parent preview race fixtures are missing");
+    }
+    slow.click();
+    parent.click();
+  });
+  await page.getByRole("button", { name: "hello.txt" }).waitFor();
+  await page.waitForTimeout(300);
+  assert.doesNotMatch(
+    await page.locator(".file-preview").textContent() ?? "",
+    /slow-preview-marker/u,
+  );
 
   await page.getByRole("button", { name: /Open (?:a )?folder/iu }).first().click();
   await page.getByText(secondFixtureRoot, { exact: true }).first().waitFor();
@@ -146,14 +172,27 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   await page.getByRole("button", { name: /Stop/u }).click();
   await page.getByText("Run stopped.", { exact: true }).waitFor();
 
+  await page.evaluate(async () => {
+    await window.oruDesktop.terminal.writeSettings({
+      fontFamily: "monospace",
+      fontSize: 17,
+      lineHeight: 1.5,
+    });
+  });
   await page.getByRole("tab", { name: "Terminal" }).click();
   const terminal = page.locator(".terminal-host .xterm");
   await terminal.waitFor();
+  assert.equal(
+    await page.locator(".xterm-rows").evaluate(
+      (element) => getComputedStyle(element).fontSize,
+    ),
+    "17px",
+  );
   await page.waitForTimeout(500);
   await terminal.click();
   await page.keyboard.type("printf 'oru-terminal-marker\\n'");
   await page.keyboard.press("Enter");
-  await page.locator(".xterm-rows").getByText(/oru-terminal-marker/u).waitFor({ timeout: 8_000 });
+  await page.locator(".xterm-rows").getByText("oru-terminal-marker", { exact: true }).waitFor({ timeout: 8_000 });
 
   await page.getByRole("button", { name: "Settings" }).click();
   await page.getByRole("dialog", { name: "Settings" }).waitFor();
@@ -187,14 +226,23 @@ test("standalone Electron shell supports the primary workspace workflow", { time
 });
 
 test("standalone Electron shell renders its Chinese locale", { timeout: 45_000 }, async (t) => {
+  const profileRoot = await mkdtemp(join(tmpdir(), "oru-electron-zh-profile-"));
   const electronApp = await electron.launch({
     executablePath: electronPath,
     args: [projectRoot, "--lang=zh-CN"],
     cwd: projectRoot,
-    env: { ...process.env, NODE_ENV: "test" },
+    env: {
+      ...process.env,
+      HOME: profileRoot,
+      NODE_ENV: "test",
+      USERPROFILE: profileRoot,
+    },
     timeout: 30_000,
   });
-  t.after(() => electronApp.close().catch(() => {}));
+  t.after(async () => {
+    await electronApp.close().catch(() => {});
+    await rm(profileRoot, { recursive: true, force: true });
+  });
   const page = await electronApp.firstWindow();
   await page.getByRole("heading", { name: /专注服务于.*编码 Agent/u }).waitFor();
   await electronApp.evaluate(({ BrowserWindow }) => {
