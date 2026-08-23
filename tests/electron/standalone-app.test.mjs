@@ -94,6 +94,18 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   page.on("pageerror", (error) => rendererErrors.push(error.stack ?? error.message));
 
   await page.getByRole("heading", { name: /A focused home for your coding agents/u }).waitFor();
+  const nativeOpenFolder = await electronApp.evaluate(({ Menu }) => {
+    const item = Menu.getApplicationMenu()?.getMenuItemById(
+      "minke.shortcut.workspace.open",
+    );
+    return item === undefined
+      ? null
+      : { accelerator: item.accelerator, label: item.label };
+  });
+  assert.deepEqual(nativeOpenFolder, {
+    accelerator: "CommandOrControl+O",
+    label: "Open Folder",
+  });
   await invokeShortcut("palette.open");
   const palette = page.getByRole("dialog", { name: "Command palette" });
   await palette.waitFor();
@@ -247,6 +259,13 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   await page.getByText("Enter a credential-free HTTP(S) URL.").waitFor();
   await address.fill(server.url);
   await page.getByRole("button", { name: "Go" }).click();
+  await page.waitForFunction((expected) => {
+    const view = document.querySelector("webview");
+    return view !== null && "getURL" in view && view.getURL().startsWith(expected);
+  }, server.url);
+  await page.getByRole("tab", { name: "Files" }).click();
+  await page.getByRole("tab", { name: "Web" }).click();
+  assert.equal(await address.inputValue(), server.url);
   await page.waitForFunction((expected) => {
     const view = document.querySelector("webview");
     return view !== null && "getURL" in view && view.getURL().startsWith(expected);

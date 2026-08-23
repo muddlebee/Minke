@@ -18,6 +18,7 @@ import {
 const OWNED_MENU_ID_PREFIX = "minke.shortcut.";
 
 const MENU_ITEM_IDS = Object.freeze({
+  "workspace.open": `${OWNED_MENU_ID_PREFIX}workspace.open`,
   "palette.open": `${OWNED_MENU_ID_PREFIX}palette.open`,
   "settings.open": `${OWNED_MENU_ID_PREFIX}settings.open`,
   "session.new": `${OWNED_MENU_ID_PREFIX}session.new`,
@@ -29,6 +30,7 @@ const MENU_ITEM_IDS = Object.freeze({
 } satisfies Record<ProductShortcutActionId, string>);
 
 const MENU_LABEL_KEYS = Object.freeze({
+  "workspace.open": "ui.command.openFolder",
   "palette.open": "menu.commandPalette",
   "settings.open": "menu.settings",
   "session.new": "menu.newSession",
@@ -212,6 +214,12 @@ function injectActions(
     entries.push(viewMenu);
   }
 
+  const openWorkspace = actionMenuItem(
+    "workspace.open",
+    locale,
+    accelerators,
+    dispatch,
+  );
   const newSession = actionMenuItem(
     "session.new",
     locale,
@@ -264,8 +272,8 @@ function injectActions(
   prependGroup(
     submenuOf(fileMenu.template),
     platform === "darwin"
-      ? [newSession]
-      : [newSession, settings],
+      ? [openWorkspace, newSession]
+      : [openWorkspace, newSession, settings],
     `${OWNED_MENU_ID_PREFIX}file.separator`,
   );
   prependGroup(

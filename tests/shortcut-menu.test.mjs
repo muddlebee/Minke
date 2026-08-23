@@ -141,6 +141,10 @@ test("all product shortcuts are visible native menu commands", () => {
   );
 
   assert.equal(
+    customItem(host, "workspace.open").accelerator,
+    "CommandOrControl+O",
+  );
+  assert.equal(
     customItem(host, "palette.open").accelerator,
     "CommandOrControl+K",
   );
@@ -173,6 +177,7 @@ test("all product shortcuts are visible native menu commands", () => {
     "CommandOrControl+B",
   );
 
+  customItem(host, "workspace.open").click();
   customItem(host, "palette.open").click();
   customItem(host, "settings.open").click();
   customItem(host, "session.new").click();
@@ -182,6 +187,7 @@ test("all product shortcuts are visible native menu commands", () => {
   customItem(host, "tabs.toggle").click();
   customItem(host, "tabs.bottom.toggle").click();
   assert.deepEqual(dispatched, [
+    "workspace.open",
     "palette.open",
     "settings.open",
     "session.new",
@@ -219,6 +225,7 @@ test("persisted and localized changes rebuild menu accelerators", () => {
   );
 
   locale.setLocale("zh");
+  assert.equal(customItem(host, "workspace.open").label, "打开文件夹");
   assert.equal(customItem(host, "palette.open").label, "命令面板…");
   assert.equal(customItem(host, "settings.open").label, "设置…");
   assert.equal(customItem(host, "session.new").label, "新建会话");
@@ -242,7 +249,7 @@ test("persisted and localized changes rebuild menu accelerators", () => {
     latestItems(host).filter(
       (item) => item.id?.startsWith(CUSTOM_PREFIX),
     ).filter((item) => item.type !== "separator").length,
-    8,
+    9,
   );
 
   const rebuilds = host.templates.length;

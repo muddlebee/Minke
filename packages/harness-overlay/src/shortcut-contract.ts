@@ -7,6 +7,7 @@ export const SHORTCUT_SETTINGS_WRITE_CHANNEL =
 export const SHORTCUT_INVOKE_CHANNEL = "oru:shortcut:invoke";
 
 export const DEFAULT_SHORTCUT_BINDINGS = Object.freeze({
+  "workspace.open": "Mod+O",
   "palette.open": "Mod+K",
   "settings.open": "Mod+Comma",
   "session.new": "Mod+N",

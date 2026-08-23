@@ -39,6 +39,7 @@ export function ToolPanel(props: {
 }): ReactNode {
   const [active, setActive] = useState<ToolKind>("files");
   const [terminalOpened, setTerminalOpened] = useState(false);
+  const [webOpened, setWebOpened] = useState(false);
   const t: Translate = useCallback(
     (key, params) => translateDesktop(props.locale, key, params),
     [props.locale],
@@ -55,6 +56,7 @@ export function ToolPanel(props: {
               onClick={() => {
                 setActive(kind);
                 if (kind === "terminal") setTerminalOpened(true);
+                if (kind === "web") setWebOpened(true);
               }}
               role="tab"
               aria-selected={active === kind}
@@ -75,7 +77,7 @@ export function ToolPanel(props: {
             t={t}
           />
         )}
-        {active === "web" && <WebTool t={t} />}
+        {webOpened && <WebTool hidden={active !== "web"} t={t} />}
       </div>
     </aside>
   );
@@ -301,7 +303,13 @@ interface OruWebviewElement extends HTMLElement {
   reload(): void;
 }
 
-function WebTool({ t }: { t: Translate }): ReactNode {
+function WebTool({
+  hidden,
+  t,
+}: {
+  hidden: boolean;
+  t: Translate;
+}): ReactNode {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<OruWebviewElement | undefined>(undefined);
   const [input, setInput] = useState("https://example.com");
@@ -340,7 +348,7 @@ function WebTool({ t }: { t: Translate }): ReactNode {
   };
 
   return (
-    <div className="web-tool">
+    <div className="web-tool" hidden={hidden}>
       <form className="web-address" onSubmit={(event) => { event.preventDefault(); navigate(); }}>
         <button className="icon-button" onClick={() => viewRef.current?.reload()} type="button" aria-label={t("ui.web.reload")}>↻</button>
         <input value={input} onChange={(event) => setInput(event.currentTarget.value)} aria-label={t("ui.web.address")} />

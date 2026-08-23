@@ -137,18 +137,16 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
         else if (settingsOpen) setSettingsOpen(false);
         return;
       }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "o") {
-        event.preventDefault();
-        void openWorkspace();
-      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [openWorkspace, paletteOpen, settingsOpen]);
+  }, [paletteOpen, settingsOpen]);
 
   useEffect(() => {
     const unsubscribe = window.oruDesktop.shortcuts.subscribe((id) => {
-      if (id === "palette.open") {
+      if (id === "workspace.open") {
+        void openWorkspace();
+      } else if (id === "palette.open") {
         setSettingsOpen(false);
         setPaletteOpen(true);
       } else if (id === "settings.open") {
@@ -168,7 +166,7 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
       }
     });
     return unsubscribe;
-  }, [activeWorkspace, moveSession, runtime]);
+  }, [activeWorkspace, moveSession, openWorkspace, runtime]);
 
   return (
     <main
