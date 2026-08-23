@@ -72,6 +72,47 @@ export const SHORTCUT_BINDING_PATTERN = new RegExp(
 
 export type ShortcutBindings = Record<string, string>;
 
+const DISPLAY_KEYS: Readonly<Record<string, string>> = Object.freeze({
+  ArrowDown: "↓",
+  ArrowLeft: "←",
+  ArrowRight: "→",
+  ArrowUp: "↑",
+  Backquote: "`",
+  Backslash: "\\",
+  BracketLeft: "[",
+  BracketRight: "]",
+  Comma: ",",
+  Equal: "=",
+  Minus: "-",
+  Period: ".",
+  Quote: "'",
+  Semicolon: ";",
+  Slash: "/",
+});
+
+export function formatShortcutBinding(
+  binding: string,
+  platform: string,
+): string | undefined {
+  if (binding === "") return undefined;
+  if (!isShortcutBinding(binding)) {
+    throw new TypeError(`invalid shortcut binding ${JSON.stringify(binding)}`);
+  }
+  const tokens = binding.split("+");
+  const key = tokens.pop();
+  if (key === undefined) return undefined;
+  const macOS = platform === "darwin";
+  const modifiers = tokens.map((token) => {
+    if (token === "Mod") return macOS ? "⌘" : "Ctrl";
+    if (token === "Ctrl") return macOS ? "⌃" : "Ctrl";
+    if (token === "Meta") return macOS ? "⌘" : "Super";
+    if (token === "Alt") return macOS ? "⌥" : "Alt";
+    if (token === "Shift") return macOS ? "⇧" : "Shift";
+    return token;
+  });
+  return [...modifiers, DISPLAY_KEYS[key] ?? key].join(macOS ? "" : "+");
+}
+
 /** Narrow untrusted native-menu messages to Oru-owned shortcut actions. */
 export function isProductShortcutActionId(
   value: unknown,

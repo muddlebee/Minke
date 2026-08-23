@@ -118,10 +118,19 @@ test("standalone Electron shell supports the primary workspace workflow", { time
     accelerator: "CommandOrControl+O",
     label: "Open Folder",
   });
+  await page.evaluate(async () => {
+    await window.oruDesktop.shortcuts.write({
+      "workspace.open": "Mod+Shift+O",
+      "session.new": "",
+    });
+  });
   await invokeShortcut("palette.open");
   const palette = page.getByRole("dialog", { name: "Command palette" });
   await palette.waitFor();
-  await palette.getByText(process.platform === "darwin" ? "⌘O" : "Ctrl+O").waitFor();
+  await palette.getByText(
+    process.platform === "darwin" ? "⌘⇧O" : "Ctrl+Shift+O",
+  ).waitFor();
+  await palette.getByText("—", { exact: true }).waitFor();
   await page.keyboard.press("Escape");
   await page.getByRole("dialog", { name: "Command palette" }).waitFor({ state: "hidden" });
   await invokeShortcut("sidebar.toggle");
@@ -208,10 +217,15 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   await page.locator(".file-preview .error-state").waitFor();
   assert.equal(await page.locator(".file-row").count(), 0);
 
+  await page.locator(".session-row").nth(1).click();
   await page.getByRole("button", { name: /Open (?:a )?folder/iu }).first().click();
   await page.getByText(secondFixtureRoot, { exact: true }).first().waitFor();
   await page.getByRole("button", { name: "second.txt" }).waitFor();
   await page.locator(".sidebar-row", { hasText: basename(fixtureRoot) }).click();
+  assert.equal(
+    await page.locator(".session-row").nth(1).getAttribute("data-active"),
+    "true",
+  );
   await page.getByRole("button", { name: "hello.txt" }).waitFor();
 
   await composer.fill("Explain the adapter boundary");

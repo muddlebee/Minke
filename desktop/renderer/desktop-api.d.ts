@@ -24,6 +24,7 @@ import type {
 } from "@minke/desktop/window-theme-contract";
 import type {
   ProductShortcutActionId,
+  ShortcutBindings,
 } from "@minke/harness-overlay/shortcut-contract";
 
 interface OruDesktopApi {
@@ -55,6 +56,8 @@ interface OruDesktopApi {
     openExternal(url: string): void;
   };
   readonly shortcuts: {
+    read(): Promise<ShortcutBindings>;
+    write(bindings: ShortcutBindings): Promise<void>;
     subscribe(listener: (id: ProductShortcutActionId) => void): () => void;
   };
   readonly windowTheme: {

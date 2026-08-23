@@ -128,8 +128,10 @@ function observeWindowTheme(): void {
 }
 
 const shortcuts = Object.freeze({
-  async read(): Promise<unknown> {
-    return await ipcRenderer.invoke(SHORTCUT_SETTINGS_READ_CHANNEL);
+  async read(): Promise<ShortcutBindings> {
+    return parseShortcutBindings(
+      await ipcRenderer.invoke(SHORTCUT_SETTINGS_READ_CHANNEL),
+    );
   },
   async write(bindings: ShortcutBindings): Promise<void> {
     await ipcRenderer.invoke(

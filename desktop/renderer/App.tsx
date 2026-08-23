@@ -18,6 +18,12 @@ import {
 } from "@minke/desktop/i18n";
 import type { DesktopWorkspace } from "@minke/desktop/standalone-contract";
 import {
+  DEFAULT_SHORTCUT_BINDINGS,
+  formatShortcutBinding,
+  type ProductShortcutActionId,
+  type ShortcutBindings,
+} from "@minke/harness-overlay/shortcut-contract";
+import {
   DemoAgentRuntime,
   type AgentRuntime,
   type AgentSession,
@@ -62,6 +68,10 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
   const [toolsOpen, setToolsOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shortcutBindings, setShortcutBindings] = useState<ShortcutBindings>(
+    () => ({ ...DEFAULT_SHORTCUT_BINDINGS }),
+  );
+  const lastSessionByWorkspace = useRef(new Map<string, string>());
   const [theme, setTheme] = useState<ThemePreference>(() => {
     const stored = localStorage.getItem(THEME_STORAGE_KEY) ??
       localStorage.getItem("minke.theme");
@@ -69,9 +79,14 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
   });
   const activeWorkspace = workspaces.find((item) => item.id === activeWorkspaceId);
   const activeSession = snapshot.sessions.find((item) => item.id === snapshot.activeSessionId);
-  const primaryModifier = window.oruDesktop.about.platform === "darwin"
-    ? "⌘"
-    : "Ctrl+";
+  const shortcut = useCallback(
+    (id: ProductShortcutActionId) =>
+      formatShortcutBinding(
+        shortcutBindings[id] ?? DEFAULT_SHORTCUT_BINDINGS[id],
+        window.oruDesktop.about.platform,
+      ),
+    [shortcutBindings],
+  );
   const t = useCallback(
     (key: DesktopMessageKey, params?: DesktopTranslateParams) =>
       translateDesktop(locale, key, params),
@@ -88,6 +103,30 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
     [providedRuntime, runtime],
   );
   useEffect(() => {
+    if (activeSession !== undefined) {
+      lastSessionByWorkspace.current.set(
+        activeSession.workspaceId,
+        activeSession.id,
+      );
+    }
+  }, [activeSession]);
+  useEffect(() => {
+    let active = true;
+    void window.oruDesktop.shortcuts.read().then((overrides) => {
+      if (active) {
+        setShortcutBindings({
+          ...DEFAULT_SHORTCUT_BINDINGS,
+          ...overrides,
+        });
+      }
+    }).catch(() => {
+      if (active) setShortcutBindings({ ...DEFAULT_SHORTCUT_BINDINGS });
+    });
+    return () => {
+      active = false;
+    };
+  }, [paletteOpen]);
+  useEffect(() => {
     localStorage.setItem(THEME_STORAGE_KEY, theme);
     localStorage.removeItem("minke.theme");
     const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -102,20 +141,31 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
     return () => media.removeEventListener("change", apply);
   }, [theme]);
 
+  const selectWorkspace = useCallback((workspace: DesktopWorkspace): void => {
+    setActiveWorkspaceId(workspace.id);
+    const remembered = lastSessionByWorkspace.current.get(workspace.id);
+    const session = snapshot.sessions.find(
+      (item) =>
+        item.workspaceId === workspace.id &&
+        item.id === remembered,
+    ) ?? snapshot.sessions.find(
+      (item) => item.workspaceId === workspace.id,
+    );
+    if (session !== undefined) runtime.selectSession(session.id);
+  }, [runtime, snapshot.sessions]);
+
   const openWorkspace = useCallback(async (): Promise<void> => {
     const selected = await window.oruDesktop.workspace.open();
     if (selected === undefined) return;
     const existing = workspaces.find((item) => item.path === selected.path);
     if (existing !== undefined) {
-      setActiveWorkspaceId(existing.id);
-      const session = snapshot.sessions.find((item) => item.workspaceId === existing.id);
-      if (session !== undefined) runtime.selectSession(session.id);
+      selectWorkspace(existing);
       return;
     }
     setWorkspaces((current) => [...current, selected]);
     setActiveWorkspaceId(selected.id);
     runtime.createSession(selected);
-  }, [runtime, snapshot.sessions, workspaces]);
+  }, [runtime, selectWorkspace, workspaces]);
 
   const moveSession = useCallback((direction: "back" | "forward"): void => {
     if (activeWorkspace === undefined) return;
@@ -184,11 +234,7 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
           runtimeLabel={runtimeLabel}
           t={t}
           onOpenWorkspace={() => void openWorkspace()}
-          onSelectWorkspace={(workspace) => {
-            setActiveWorkspaceId(workspace.id);
-            const session = snapshot.sessions.find((item) => item.workspaceId === workspace.id);
-            if (session !== undefined) runtime.selectSession(session.id);
-          }}
+          onSelectWorkspace={selectWorkspace}
           onSelectSession={(sessionId) => runtime.selectSession(sessionId)}
           onNewSession={() => activeWorkspace !== undefined && runtime.createSession(activeWorkspace)}
           onOpenSettings={() => setSettingsOpen(true)}
@@ -206,7 +252,7 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
         </header>
         {activeWorkspace === undefined || activeSession === undefined
           ? <Welcome
-              openShortcut={`${primaryModifier}O`}
+              openShortcut={shortcut("workspace.open") ?? "—"}
               onOpen={() => void openWorkspace()}
               t={t}
             />
@@ -226,7 +272,7 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
       {paletteOpen && (
         <CommandPalette
           canCreateSession={activeWorkspace !== undefined}
-          primaryModifier={primaryModifier}
+          shortcut={shortcut}
           t={t}
           toolsOpen={toolsOpen}
           onClose={() => setPaletteOpen(false)}
@@ -264,7 +310,7 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
 
 function CommandPalette(props: {
   canCreateSession: boolean;
-  primaryModifier: string;
+  shortcut(id: ProductShortcutActionId): string | undefined;
   t: Translate;
   toolsOpen: boolean;
   onClose(): void;
@@ -274,10 +320,10 @@ function CommandPalette(props: {
   onOpenSettings(): void;
 }): ReactNode {
   const actions = [
-    { label: props.t("ui.command.openFolder"), shortcut: `${props.primaryModifier}O`, run: props.onOpenWorkspace },
-    { label: props.t("ui.command.newSession"), shortcut: `${props.primaryModifier}N`, run: props.onNewSession, disabled: !props.canCreateSession },
-    { label: props.toolsOpen ? props.t("ui.tools.hide") : props.t("ui.tools.show"), shortcut: `${props.primaryModifier}P`, run: props.onToggleTools },
-    { label: props.t("ui.command.settings"), shortcut: `${props.primaryModifier},`, run: props.onOpenSettings },
+    { label: props.t("ui.command.openFolder"), shortcut: props.shortcut("workspace.open") ?? "—", run: props.onOpenWorkspace },
+    { label: props.t("ui.command.newSession"), shortcut: props.shortcut("session.new") ?? "—", run: props.onNewSession, disabled: !props.canCreateSession },
+    { label: props.toolsOpen ? props.t("ui.tools.hide") : props.t("ui.tools.show"), shortcut: props.shortcut("tabs.toggle") ?? "—", run: props.onToggleTools },
+    { label: props.t("ui.command.settings"), shortcut: props.shortcut("settings.open") ?? "—", run: props.onOpenSettings },
   ];
   return (
     <div className="dialog-backdrop command-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && props.onClose()}>

@@ -5,6 +5,9 @@ import {
   shortcutBindingToAccelerator,
 } from "@minke/desktop/main/shortcut-menu.ts";
 import { DesktopLocaleRuntime } from "@minke/desktop/i18n.ts";
+import {
+  formatShortcutBinding,
+} from "@minke/harness-overlay/shortcut-contract.ts";
 
 const CUSTOM_PREFIX = "minke.shortcut.";
 
@@ -103,6 +106,13 @@ function customItem(host, suffix) {
   assert.ok(item, `missing native menu item ${suffix}`);
   return item;
 }
+
+test("shortcut labels reflect platform modifiers and disabled bindings", () => {
+  assert.equal(formatShortcutBinding("Mod+Shift+O", "darwin"), "⌘⇧O");
+  assert.equal(formatShortcutBinding("Mod+Shift+O", "linux"), "Ctrl+Shift+O");
+  assert.equal(formatShortcutBinding("Alt+Comma", "darwin"), "⌥,");
+  assert.equal(formatShortcutBinding("", "win32"), undefined);
+});
 
 test("canonical shortcuts map to Electron accelerators", () => {
   assert.equal(
