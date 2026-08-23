@@ -166,7 +166,8 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   await page.locator(".session-row").nth(1).click();
   assert.equal(await composer.inputValue(), "");
   await page.locator(".session-row").first().click();
-  assert.equal(await composer.inputValue(), "");
+  assert.equal(await composer.inputValue(), "first-session-unsent-draft");
+  await composer.fill("");
 
   await page.evaluate(() => {
     const rows = [...document.querySelectorAll(".file-row")];

@@ -68,6 +68,7 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
   const [toolsOpen, setToolsOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>({});
   const [shortcutBindings, setShortcutBindings] =
     useState<EffectiveProductShortcutBindings>(
       () => resolveProductShortcutBindings(
@@ -181,6 +182,16 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
     runtime.createSession(selected);
   }, [runtime, selectWorkspace, workspaces]);
 
+  const updateDraft = useCallback((sessionId: string, value: string): void => {
+    setDrafts((current) => {
+      if (value === "") {
+        const { [sessionId]: _removed, ...remaining } = current;
+        return remaining;
+      }
+      return { ...current, [sessionId]: value };
+    });
+  }, []);
+
   const moveSession = useCallback((direction: "back" | "forward"): void => {
     if (activeWorkspace === undefined) return;
     const visible = snapshot.sessions.filter(
@@ -270,7 +281,13 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
               onOpen={() => void openWorkspace()}
               t={t}
             />
-          : <Conversation key={activeSession.id} session={activeSession} runtime={runtime} t={t} />}
+          : <Conversation
+              draft={drafts[activeSession.id] ?? ""}
+              session={activeSession}
+              runtime={runtime}
+              t={t}
+              onDraft={(value) => updateDraft(activeSession.id, value)}
+            />}
       </section>
       {workspaces.map((workspace) => (
         <Suspense
@@ -431,17 +448,28 @@ function Welcome(props: {
   );
 }
 
-function Conversation({ session, runtime, t }: { session: AgentSession; runtime: AgentRuntime; t: Translate }): ReactNode {
-  const [prompt, setPrompt] = useState("");
+function Conversation({
+  draft,
+  session,
+  runtime,
+  t,
+  onDraft,
+}: {
+  draft: string;
+  session: AgentSession;
+  runtime: AgentRuntime;
+  t: Translate;
+  onDraft(value: string): void;
+}): ReactNode {
   const endRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [session.messages.length, session.activities.length]);
   const submit = (event: FormEvent): void => {
     event.preventDefault();
-    if (session.status !== "idle" || prompt.trim() === "") return;
-    runtime.send(session.id, prompt);
-    setPrompt("");
+    if (session.status !== "idle" || draft.trim() === "") return;
+    runtime.send(session.id, draft);
+    onDraft("");
   };
   return (
     <div className="conversation">
@@ -465,7 +493,7 @@ function Conversation({ session, runtime, t }: { session: AgentSession; runtime:
         <div ref={endRef} />
       </div></div>
       <form className="composer" onSubmit={submit}>
-        <textarea aria-label={t("ui.composer.message")} placeholder={t("ui.composer.placeholder")} value={prompt} onChange={(event) => setPrompt(event.currentTarget.value)} onKeyDown={(event) => {
+        <textarea aria-label={t("ui.composer.message")} placeholder={t("ui.composer.placeholder")} value={draft} onChange={(event) => onDraft(event.currentTarget.value)} onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
             event.currentTarget.form?.requestSubmit();
@@ -474,7 +502,7 @@ function Conversation({ session, runtime, t }: { session: AgentSession; runtime:
         <div className="composer__footer">
           <span>{t("ui.composer.hint")}</span>
           {session.status === "idle"
-            ? <button className="send-button" disabled={prompt.trim() === ""} type="submit" aria-label={t("ui.composer.send")}>↑</button>
+            ? <button className="send-button" disabled={draft.trim() === ""} type="submit" aria-label={t("ui.composer.send")}>↑</button>
             : <button className="stop-button" onClick={() => runtime.abort(session.id)} type="button">■ {t("ui.composer.stop")}</button>}
         </div>
       </form>
