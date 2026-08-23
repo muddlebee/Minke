@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
-import { basename, isAbsolute, relative } from "node:path";
+import { basename, isAbsolute, relative, sep } from "node:path";
 import type { DesktopWorkspace } from "@minke/desktop/standalone-contract";
 
 export interface AuthorizedWorkspacePath {
@@ -11,7 +11,11 @@ export interface AuthorizedWorkspacePath {
 /** Window-lifetime capability registry for user-approved workspace paths. */
 function isWithin(root: string, candidate: string): boolean {
   const child = relative(root, candidate);
-  return child === "" || (!child.startsWith("..") && !isAbsolute(child));
+  return child === "" || (
+    child !== ".." &&
+    !child.startsWith(`..${sep}`) &&
+    !isAbsolute(child)
+  );
 }
 
 export class WorkspaceAccessRegistry {

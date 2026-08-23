@@ -11,6 +11,7 @@ import {
   DEFAULT_SHORTCUT_BINDINGS,
   isShortcutBinding,
   parseShortcutBindings,
+  resolveProductShortcutBindings,
   type ProductShortcutActionId,
   type ShortcutBindings,
 } from "@minke/harness-overlay/shortcut-contract.ts";
@@ -308,36 +309,13 @@ function effectiveAccelerators(
   overrides: ShortcutBindings,
   platform: NodeJS.Platform,
 ): Record<ProductShortcutActionId, string | undefined> {
-  const ids = Object.keys(
-    DEFAULT_SHORTCUT_BINDINGS,
-  ) as ProductShortcutActionId[];
-  const effective = Object.fromEntries(
-    ids.map((id) => {
-      const binding = Object.hasOwn(overrides, id)
-        ? overrides[id]
-        : DEFAULT_SHORTCUT_BINDINGS[id];
-      return [
-        id,
-        shortcutBindingToAccelerator(binding ?? null, platform),
-      ];
-    }),
+  const effective = resolveProductShortcutBindings(overrides);
+  return Object.fromEntries(
+    Object.entries(effective).map(([id, binding]) => [
+      id,
+      shortcutBindingToAccelerator(binding ?? null, platform),
+    ]),
   ) as Record<ProductShortcutActionId, string | undefined>;
-
-  const counts = new Map<string, number>();
-  for (const accelerator of Object.values(effective)) {
-    if (accelerator === undefined) continue;
-    counts.set(accelerator, (counts.get(accelerator) ?? 0) + 1);
-  }
-  for (const id of ids) {
-    const accelerator = effective[id];
-    if (
-      accelerator !== undefined &&
-      (counts.get(accelerator) ?? 0) > 1
-    ) {
-      effective[id] = undefined;
-    }
-  }
-  return effective;
 }
 
 function actionMenuItem(

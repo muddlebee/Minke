@@ -18,10 +18,10 @@ import {
 } from "@minke/desktop/i18n";
 import type { DesktopWorkspace } from "@minke/desktop/standalone-contract";
 import {
-  DEFAULT_SHORTCUT_BINDINGS,
   formatShortcutBinding,
+  resolveProductShortcutBindings,
+  type EffectiveProductShortcutBindings,
   type ProductShortcutActionId,
-  type ShortcutBindings,
 } from "@minke/harness-overlay/shortcut-contract";
 import {
   DemoAgentRuntime,
@@ -68,9 +68,10 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
   const [toolsOpen, setToolsOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [shortcutBindings, setShortcutBindings] = useState<ShortcutBindings>(
-    () => ({ ...DEFAULT_SHORTCUT_BINDINGS }),
-  );
+  const [shortcutBindings, setShortcutBindings] =
+    useState<EffectiveProductShortcutBindings>(
+      () => resolveProductShortcutBindings({}),
+    );
   const lastSessionByWorkspace = useRef(new Map<string, string>());
   const [theme, setTheme] = useState<ThemePreference>(() => {
     const stored = localStorage.getItem(THEME_STORAGE_KEY) ??
@@ -81,10 +82,13 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
   const activeSession = snapshot.sessions.find((item) => item.id === snapshot.activeSessionId);
   const shortcut = useCallback(
     (id: ProductShortcutActionId) =>
-      formatShortcutBinding(
-        shortcutBindings[id] ?? DEFAULT_SHORTCUT_BINDINGS[id],
-        window.oruDesktop.about.platform,
-      ),
+      shortcutBindings[id] === undefined ||
+      shortcutBindings[id] === ""
+        ? undefined
+        : formatShortcutBinding(
+            shortcutBindings[id],
+            window.oruDesktop.about.platform,
+          ),
     [shortcutBindings],
   );
   const t = useCallback(
@@ -114,13 +118,14 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
     let active = true;
     void window.oruDesktop.shortcuts.read().then((overrides) => {
       if (active) {
-        setShortcutBindings({
-          ...DEFAULT_SHORTCUT_BINDINGS,
-          ...overrides,
-        });
+        setShortcutBindings(
+          resolveProductShortcutBindings(overrides),
+        );
       }
     }).catch(() => {
-      if (active) setShortcutBindings({ ...DEFAULT_SHORTCUT_BINDINGS });
+      if (active) {
+        setShortcutBindings(resolveProductShortcutBindings({}));
+      }
     });
     return () => {
       active = false;
@@ -258,17 +263,23 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
             />
           : <Conversation key={activeSession.id} session={activeSession} runtime={runtime} t={t} />}
       </section>
-      {activeWorkspace !== undefined && (
-        <Suspense fallback={toolsOpen ? <aside className="tool-panel"><p className="muted-state">{t("ui.tools.loading")}</p></aside> : null}>
+      {workspaces.map((workspace) => (
+        <Suspense
+          key={workspace.id}
+          fallback={
+            toolsOpen && workspace.id === activeWorkspaceId
+              ? <aside className="tool-panel"><p className="muted-state">{t("ui.tools.loading")}</p></aside>
+              : null
+          }
+        >
           <ToolPanel
-            key={activeWorkspace.id}
-            hidden={!toolsOpen}
+            hidden={!toolsOpen || workspace.id !== activeWorkspaceId}
             locale={locale}
-            workspace={activeWorkspace}
+            workspace={workspace}
             onClose={() => setToolsOpen(false)}
           />
         </Suspense>
-      )}
+      ))}
       {paletteOpen && (
         <CommandPalette
           canCreateSession={activeWorkspace !== undefined}

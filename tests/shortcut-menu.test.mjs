@@ -7,6 +7,7 @@ import {
 import { DesktopLocaleRuntime } from "@minke/desktop/i18n.ts";
 import {
   formatShortcutBinding,
+  resolveProductShortcutBindings,
 } from "@minke/harness-overlay/shortcut-contract.ts";
 
 const CUSTOM_PREFIX = "minke.shortcut.";
@@ -106,6 +107,16 @@ function customItem(host, suffix) {
   assert.ok(item, `missing native menu item ${suffix}`);
   return item;
 }
+
+test("conflicting product bindings are disabled consistently", () => {
+  const effective = resolveProductShortcutBindings({
+    "settings.open": "Alt+S",
+    "tabs.toggle": "Alt+S",
+  });
+  assert.equal(effective["settings.open"], undefined);
+  assert.equal(effective["tabs.toggle"], undefined);
+  assert.equal(effective["workspace.open"], "Mod+O");
+});
 
 test("shortcut labels reflect platform modifiers and disabled bindings", () => {
   assert.equal(formatShortcutBinding("Mod+Shift+O", "darwin"), "⌘⇧O");
@@ -223,7 +234,9 @@ test("persisted and localized changes rebuild menu accelerators", () => {
 
   binding.updateBindings({
     "session.new": "",
+    "settings.open": "Alt+S",
     "sidebar.toggle": "Mod+Shift+S",
+    "tabs.toggle": "Alt+S",
   });
   assert.equal(
     Object.hasOwn(customItem(host, "session.new"), "accelerator"),
@@ -232,6 +245,14 @@ test("persisted and localized changes rebuild menu accelerators", () => {
   assert.equal(
     customItem(host, "sidebar.toggle").accelerator,
     "CommandOrControl+Shift+S",
+  );
+  assert.equal(
+    Object.hasOwn(customItem(host, "settings.open"), "accelerator"),
+    false,
+  );
+  assert.equal(
+    Object.hasOwn(customItem(host, "tabs.toggle"), "accelerator"),
+    false,
   );
 
   locale.setLocale("zh");

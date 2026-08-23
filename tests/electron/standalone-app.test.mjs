@@ -122,6 +122,8 @@ test("standalone Electron shell supports the primary workspace workflow", { time
     await window.oruDesktop.shortcuts.write({
       "workspace.open": "Mod+Shift+O",
       "session.new": "",
+      "settings.open": "Alt+S",
+      "tabs.toggle": "Alt+S",
     });
   });
   await invokeShortcut("palette.open");
@@ -130,7 +132,10 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   await palette.getByText(
     process.platform === "darwin" ? "⌘⇧O" : "Ctrl+Shift+O",
   ).waitFor();
-  await palette.getByText("—", { exact: true }).waitFor();
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll(".command-palette kbd")]
+      .filter((item) => item.textContent === "—").length === 3,
+  );
   await page.keyboard.press("Escape");
   await page.getByRole("dialog", { name: "Command palette" }).waitFor({ state: "hidden" });
   await invokeShortcut("sidebar.toggle");
@@ -210,13 +215,6 @@ test("standalone Electron shell supports the primary workspace workflow", { time
     /slow-preview-marker/u,
   );
 
-  await page.getByRole("button", { name: "vanishing" }).click();
-  await page.getByRole("button", { name: "missing-next" }).waitFor();
-  await rm(join(fixtureRoot, "vanishing"), { recursive: true, force: true });
-  await page.getByRole("button", { name: "missing-next" }).click();
-  await page.locator(".file-preview .error-state").waitFor();
-  assert.equal(await page.locator(".file-row").count(), 0);
-
   await page.locator(".session-row").nth(1).click();
   await page.getByRole("button", { name: /Open (?:a )?folder/iu }).first().click();
   await page.getByText(secondFixtureRoot, { exact: true }).first().waitFor();
@@ -274,6 +272,12 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   await page.keyboard.type("printf 'collapsed-%s\\n' \"$ORU_PERSIST_TEST\"");
   await page.keyboard.press("Enter");
   await page.locator(".xterm-rows").getByText("collapsed-kept", { exact: true }).waitFor({ timeout: 8_000 });
+  await page.locator(".sidebar-row", { hasText: basename(secondFixtureRoot) }).click();
+  await page.locator(".sidebar-row", { hasText: basename(fixtureRoot) }).click();
+  await terminal.click();
+  await page.keyboard.type("printf 'workspace-%s\\n' \"$ORU_PERSIST_TEST\"");
+  await page.keyboard.press("Enter");
+  await page.locator(".xterm-rows").getByText("workspace-kept", { exact: true }).waitFor({ timeout: 8_000 });
 
   await page.getByRole("button", { name: "Settings" }).click();
   await page.getByRole("dialog", { name: "Settings" }).waitFor();
@@ -324,6 +328,14 @@ test("standalone Electron shell supports the primary workspace workflow", { time
     const view = document.querySelector("webview");
     return view !== null && "getURL" in view && view.getURL() === expected;
   }, `${server.url}/current`);
+
+  await page.getByRole("tab", { name: "Files" }).click();
+  await page.getByRole("button", { name: "vanishing" }).click();
+  await page.getByRole("button", { name: "missing-next" }).waitFor();
+  await rm(join(fixtureRoot, "vanishing"), { recursive: true, force: true });
+  await page.getByRole("button", { name: "missing-next" }).click();
+  await page.locator(".file-preview .error-state").waitFor();
+  assert.equal(await page.locator(".file-row").count(), 0);
 
   await page.screenshot({ path: join(artifacts, "standalone-workspace.png") });
   assert.deepEqual(rendererErrors, [], `renderer errors:\n${rendererErrors.join("\n")}`);

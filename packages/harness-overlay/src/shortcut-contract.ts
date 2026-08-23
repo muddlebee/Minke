@@ -71,6 +71,42 @@ export const SHORTCUT_BINDING_PATTERN = new RegExp(
 );
 
 export type ShortcutBindings = Record<string, string>;
+export type EffectiveProductShortcutBindings = Readonly<
+  Record<ProductShortcutActionId, string | undefined>
+>;
+
+export function resolveProductShortcutBindings(
+  overrides: ShortcutBindings,
+): EffectiveProductShortcutBindings {
+  const parsed = parseShortcutBindings(overrides);
+  const ids = Object.keys(
+    DEFAULT_SHORTCUT_BINDINGS,
+  ) as ProductShortcutActionId[];
+  const effective = Object.fromEntries(
+    ids.map((id) => [
+      id,
+      Object.hasOwn(parsed, id)
+        ? parsed[id]
+        : DEFAULT_SHORTCUT_BINDINGS[id],
+    ]),
+  ) as Record<ProductShortcutActionId, string | undefined>;
+  const counts = new Map<string, number>();
+  for (const binding of Object.values(effective)) {
+    if (binding === undefined || binding === "") continue;
+    counts.set(binding, (counts.get(binding) ?? 0) + 1);
+  }
+  for (const id of ids) {
+    const binding = effective[id];
+    if (
+      binding !== undefined &&
+      binding !== "" &&
+      (counts.get(binding) ?? 0) > 1
+    ) {
+      effective[id] = undefined;
+    }
+  }
+  return Object.freeze(effective);
+}
 
 const DISPLAY_KEYS: Readonly<Record<string, string>> = Object.freeze({
   ArrowDown: "↓",
