@@ -185,7 +185,8 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
   const updateDraft = useCallback((sessionId: string, value: string): void => {
     setDrafts((current) => {
       if (value === "") {
-        const { [sessionId]: _removed, ...remaining } = current;
+        const remaining = { ...current };
+        delete remaining[sessionId];
         return remaining;
       }
       return { ...current, [sessionId]: value };
