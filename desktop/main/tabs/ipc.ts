@@ -59,7 +59,10 @@ interface TabsBindingOptions {
   readonly runtimeRoot?: string;
   readonly defaultCwd: string;
   readonly fileSystemRoot: string;
-  readonly authorizePath?: (candidate: string) => Promise<AuthorizedPath>;
+  readonly authorizePath?: (
+    candidate: string,
+    root?: string,
+  ) => Promise<AuthorizedPath>;
 }
 
 async function resolveTerminalCwd(
@@ -139,9 +142,10 @@ export function bindTabs(
   };
   const authorizeFilePath = async (
     path: string,
+    root?: string,
   ): Promise<AuthorizedPath> => options.authorizePath === undefined
-    ? { path, root: options.fileSystemRoot }
-    : await options.authorizePath(path);
+    ? { path, root: root ?? options.fileSystemRoot }
+    : await options.authorizePath(path, root);
   const handleWillAttach = (
     event: Electron.Event,
     webPreferences: WebPreferences,
@@ -219,9 +223,10 @@ export function bindTabs(
     const path = parsed.path === undefined
       ? options.fileSystemRoot
       : parsed.path;
-    const authorized = await authorizeFilePath(path);
+    const authorized = await authorizeFilePath(path, parsed.root);
+    const { root: _root, ...managerRequest } = parsed;
     return await fileManager(authorized.root).list({
-      ...parsed,
+      ...managerRequest,
       path: authorized.path,
     });
   };
@@ -233,7 +238,7 @@ export function bindTabs(
       throw new Error("unauthorized Files request");
     }
     const parsed = parseFileManagerOpenRequest(request);
-    const authorized = await authorizeFilePath(parsed.path);
+    const authorized = await authorizeFilePath(parsed.path, parsed.root);
     await fileManager(authorized.root).open({ path: authorized.path });
   };
   const handleFilesPreview = async (
@@ -244,7 +249,7 @@ export function bindTabs(
       throw new Error("unauthorized Files request");
     }
     const parsed = parseFileManagerPreviewRequest(request);
-    const authorized = await authorizeFilePath(parsed.path);
+    const authorized = await authorizeFilePath(parsed.path, parsed.root);
     return await fileManager(authorized.root).preview({
       path: authorized.path,
     });
@@ -257,9 +262,10 @@ export function bindTabs(
       throw new Error("unauthorized Files request");
     }
     const parsed = parseFileManagerWriteRequest(request);
-    const authorized = await authorizeFilePath(parsed.path);
+    const authorized = await authorizeFilePath(parsed.path, parsed.root);
+    const { root: _root, ...managerRequest } = parsed;
     return await fileManager(authorized.root).write({
-      ...parsed,
+      ...managerRequest,
       path: authorized.path,
     });
   };

@@ -69,7 +69,11 @@ export function ToolPanel(props: {
         <button className="icon-button" onClick={props.onClose} type="button" aria-label={t("ui.tools.close")}>×</button>
       </header>
       <div className="tool-panel__body">
-        {active === "files" && <FilesTool root={props.workspace.path} t={t} />}
+        <FilesTool
+          hidden={active !== "files"}
+          root={props.workspace.path}
+          t={t}
+        />
         {terminalOpened && (
           <TerminalTool
             cwd={props.workspace.path}
@@ -83,7 +87,15 @@ export function ToolPanel(props: {
   );
 }
 
-function FilesTool({ root, t }: { root: string; t: Translate }): ReactNode {
+function FilesTool({
+  hidden,
+  root,
+  t,
+}: {
+  hidden: boolean;
+  root: string;
+  t: Translate;
+}): ReactNode {
   const [path, setPath] = useState(root);
   const [parent, setParent] = useState<string>();
   const [entries, setEntries] = useState<readonly FileManagerEntry[]>([]);
@@ -110,7 +122,7 @@ function FilesTool({ root, t }: { root: string; t: Translate }): ReactNode {
     setPreview(undefined);
     setEntries([]);
     setParent(undefined);
-    void window.oruDesktop.files.list({ path }).then((result) => {
+    void window.oruDesktop.files.list({ path, root }).then((result) => {
       if (!active) return;
       setEntries(result.entries);
       setParent(result.parent);
@@ -130,7 +142,7 @@ function FilesTool({ root, t }: { root: string; t: Translate }): ReactNode {
       navigateTo(entry.path);
       return;
     }
-    void window.oruDesktop.files.preview({ path: entry.path })
+    void window.oruDesktop.files.preview({ path: entry.path, root })
       .then((result) => {
         if (previewRequest.current === request) setPreview(result);
       })
@@ -142,7 +154,7 @@ function FilesTool({ root, t }: { root: string; t: Translate }): ReactNode {
   };
 
   return (
-    <div className="files-tool">
+    <div className="files-tool" hidden={hidden}>
       <div className="files-address" title={path}>
         <button
           className="icon-button"

@@ -185,8 +185,9 @@ function protectNavigation(webContents: WebContents): void {
 
 async function authorizeWorkspacePath(
   candidate: string,
+  root?: string,
 ): Promise<AuthorizedWorkspacePath> {
-  return await workspaceAccess.authorizeWithRoot(candidate);
+  return await workspaceAccess.authorizeWithRoot(candidate, root);
 }
 
 function bindWorkspacePicker(window: BrowserWindow): () => void {
@@ -195,7 +196,7 @@ function bindWorkspacePicker(window: BrowserWindow): () => void {
   ): Promise<DesktopWorkspace | undefined> => {
     if (!isMainFrame(window, event)) throw new Error("unauthorized workspace request");
     const result = await dialog.showOpenDialog(window, {
-      title: "Open Folder",
+      title: desktopText("workspace.openDialogTitle"),
       properties: ["openDirectory", "createDirectory"],
     });
     const selected = result.filePaths[0];

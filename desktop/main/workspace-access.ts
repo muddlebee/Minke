@@ -9,6 +9,11 @@ export interface AuthorizedWorkspacePath {
 }
 
 /** Window-lifetime capability registry for user-approved workspace paths. */
+function isWithin(root: string, candidate: string): boolean {
+  const child = relative(root, candidate);
+  return child === "" || (!child.startsWith("..") && !isAbsolute(child));
+}
+
 export class WorkspaceAccessRegistry {
   readonly #roots = new Set<string>();
 
@@ -34,18 +39,28 @@ export class WorkspaceAccessRegistry {
 
   async authorizeWithRoot(
     candidate: string,
+    requestedRoot?: string,
   ): Promise<AuthorizedWorkspacePath> {
     if (!isAbsolute(candidate)) {
       throw new TypeError("workspace path must be absolute");
     }
     const canonical = await realpath(candidate);
-    const root = [...this.#roots]
-      .filter((approvedRoot) => {
-        const child = relative(approvedRoot, canonical);
-        return child === "" || (!child.startsWith("..") && !isAbsolute(child));
-      })
-      .sort((left, right) => right.length - left.length)[0];
-    if (root === undefined) {
+    let root: string | undefined;
+    if (requestedRoot !== undefined) {
+      if (!isAbsolute(requestedRoot)) {
+        throw new TypeError("workspace root must be absolute");
+      }
+      const canonicalRoot = await realpath(requestedRoot);
+      if (!this.#roots.has(canonicalRoot)) {
+        throw new Error("workspace root is not open");
+      }
+      root = canonicalRoot;
+    } else {
+      root = [...this.#roots]
+        .filter((approvedRoot) => isWithin(approvedRoot, canonical))
+        .sort((left, right) => right.length - left.length)[0];
+    }
+    if (root === undefined || !isWithin(root, canonical)) {
       throw new Error("path is outside an open workspace");
     }
     return { path: canonical, root };

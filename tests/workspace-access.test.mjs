@@ -11,10 +11,14 @@ test("workspace capabilities allow children and reject siblings and symlink esca
   const workspace = join(root, "workspace");
   const outside = join(root, "outside");
   await Promise.all([mkdir(workspace), mkdir(outside)]);
+  const nested = join(workspace, "nested");
+  await mkdir(nested);
   const child = join(workspace, "child.txt");
+  const nestedChild = join(nested, "nested.txt");
   const secret = join(outside, "secret.txt");
   await Promise.all([
     writeFile(child, "inside", "utf8"),
+    writeFile(nestedChild, "nested", "utf8"),
     writeFile(secret, "outside", "utf8"),
   ]);
   const escape = join(workspace, "escape");
@@ -29,6 +33,21 @@ test("workspace capabilities allow children and reject siblings and symlink esca
     path: await realpath(child),
     root: await realpath(workspace),
   });
+  const approvedNested = await access.approve(nested);
+  assert.deepEqual(
+    await access.authorizeWithRoot(nestedChild, approved.path),
+    {
+      path: await realpath(nestedChild),
+      root: approved.path,
+    },
+  );
+  assert.deepEqual(
+    await access.authorizeWithRoot(nestedChild, approvedNested.path),
+    {
+      path: await realpath(nestedChild),
+      root: approvedNested.path,
+    },
+  );
   await assert.rejects(access.authorize(secret), /outside an open workspace/u);
   await assert.rejects(
     access.authorize(join(escape, "secret.txt")),

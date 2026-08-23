@@ -154,6 +154,18 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   });
   await page.getByText("oru-file-preview-marker", { exact: false }).waitFor();
   await page.waitForTimeout(300);
+  await page.getByRole("button", { name: "src" }).click();
+  await page.getByRole("button", { name: "index.ts" }).click();
+  await page.getByText("export const ready = true;", { exact: false }).waitFor();
+  await page.getByRole("tab", { name: "Web" }).click();
+  await page.getByRole("tab", { name: "Files" }).click();
+  assert.equal(
+    await page.locator(".files-address").getAttribute("title"),
+    join(fixtureRoot, "src"),
+  );
+  await page.getByText("export const ready = true;", { exact: false }).waitFor();
+  await page.getByRole("button", { name: "Parent folder" }).click();
+  await page.getByRole("button", { name: "hello.txt" }).waitFor();
   assert.doesNotMatch(
     await page.locator(".file-preview").textContent() ?? "",
     /slow-preview-marker/u,
@@ -295,6 +307,24 @@ test("standalone Electron shell renders its Chinese locale", { timeout: 45_000 }
   });
   const page = await electronApp.firstWindow();
   await page.getByRole("heading", { name: /专注服务于.*编码 Agent/u }).waitFor();
+  await electronApp.evaluate(({ dialog }) => {
+    globalThis.__oruWorkspaceDialogTitle = undefined;
+    dialog.showOpenDialog = async (_window, options) => {
+      globalThis.__oruWorkspaceDialogTitle = options.title;
+      return { canceled: true, filePaths: [] };
+    };
+  });
+  await electronApp.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0]?.webContents.send(
+      "oru:shortcut:invoke",
+      "workspace.open",
+    );
+  });
+  await page.waitForTimeout(100);
+  assert.equal(
+    await electronApp.evaluate(() => globalThis.__oruWorkspaceDialogTitle),
+    "打开文件夹",
+  );
   await electronApp.evaluate(({ BrowserWindow }) => {
     BrowserWindow.getAllWindows()[0]?.webContents.send(
       "oru:shortcut:invoke",

@@ -10,6 +10,7 @@ const zh = {
   "runtime.quit": "退出 Oru",
   "runtime.restartFailedTitle": "无法重新启动 Agent 运行时",
   "runtime.startupFailedTitle": "Oru 启动失败",
+  "workspace.openDialogTitle": "打开文件夹",
   "menu.file": "文件",
   "menu.view": "视图",
   "menu.commandPalette": "命令面板…",
@@ -111,6 +112,7 @@ const en: Record<DesktopMessageKey, string> = {
   "runtime.restartFailedTitle":
     "Unable to restart agent runtime",
   "runtime.startupFailedTitle": "Oru failed to start",
+  "workspace.openDialogTitle": "Open Folder",
   "menu.file": "File",
   "menu.view": "View",
   "menu.commandPalette": "Command Palette…",

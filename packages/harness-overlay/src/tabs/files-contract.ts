@@ -36,19 +36,23 @@ export type FileManagerEntryKind =
 
 export interface FileManagerListRequest {
   readonly path?: string;
+  readonly root?: string;
   readonly includeRepository?: boolean;
 }
 
 export interface FileManagerOpenRequest {
   readonly path: string;
+  readonly root?: string;
 }
 
 export interface FileManagerPreviewRequest {
   readonly path: string;
+  readonly root?: string;
 }
 
 export interface FileManagerWriteRequest {
   readonly path: string;
+  readonly root?: string;
   readonly content: string;
   readonly expectedVersion: string;
 }
@@ -574,6 +578,11 @@ export function parseFileManagerListRequest(
       : {
           path: pathText(candidate.path, "file list path"),
         }),
+    ...(candidate.root === undefined
+      ? {}
+      : {
+          root: pathText(candidate.root, "file list root"),
+        }),
     ...(candidate.includeRepository === undefined
       ? {}
       : {
@@ -586,7 +595,12 @@ export function parseFileManagerOpenRequest(
   value: unknown,
 ): FileManagerOpenRequest {
   const candidate = record(value, "file open request");
-  return { path: pathText(candidate.path, "file open path") };
+  return {
+    path: pathText(candidate.path, "file open path"),
+    ...(candidate.root === undefined
+      ? {}
+      : { root: pathText(candidate.root, "file open root") }),
+  };
 }
 
 export function parseFileManagerPreviewRequest(
@@ -595,6 +609,9 @@ export function parseFileManagerPreviewRequest(
   const candidate = record(value, "file preview request");
   return {
     path: pathText(candidate.path, "file preview path"),
+    ...(candidate.root === undefined
+      ? {}
+      : { root: pathText(candidate.root, "file preview root") }),
   };
 }
 
@@ -672,6 +689,9 @@ export function parseFileManagerWriteRequest(
   }
   return {
     path: pathText(candidate.path, "file write path"),
+    ...(candidate.root === undefined
+      ? {}
+      : { root: pathText(candidate.root, "file write root") }),
     content: candidate.content,
     expectedVersion: fileVersion(
       candidate.expectedVersion,

@@ -48,6 +48,7 @@ test("demo runtime exposes the same session boundary as future adapters", () => 
 });
 
 test("standalone UI and demo runtime ship Chinese copy", () => {
+  assert.equal(translateDesktop("zh", "workspace.openDialogTitle"), "打开文件夹");
   assert.equal(translateDesktop("zh", "ui.command.openFolder"), "打开文件夹");
   assert.equal(translateDesktop("zh", "ui.tools.terminal"), "终端");
   assert.match(translateDesktop("zh", "ui.welcome.lede"), /文件/u);
