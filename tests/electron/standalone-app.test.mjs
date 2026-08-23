@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -57,6 +57,11 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   await mkdir(join(fixtureRoot, "vanishing", "missing-next"));
   await writeFile(join(fixtureRoot, "vanishing", "stale.txt"), "stale-row-marker\n", "utf8");
   await writeFile(join(fixtureRoot, "src", "slow-child.txt"), slowPreview);
+  await symlink(
+    fixtureRoot,
+    join(fixtureRoot, "root-link"),
+    process.platform === "win32" ? "junction" : "dir",
+  );
   await writeFile(join(secondFixtureRoot, "second.txt"), "second-workspace-marker\n", "utf8");
   const server = await startFixtureServer();
   const artifacts = join(projectRoot, "test-results", "electron");
@@ -193,6 +198,16 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   await page.getByText("export const ready = true;", { exact: false }).waitFor();
   await page.getByRole("button", { name: "Parent folder" }).click();
   await page.getByRole("button", { name: "hello.txt" }).waitFor();
+  await page.getByRole("button", { name: "root-link" }).click();
+  await page.getByRole("button", { name: "hello.txt" }).waitFor();
+  assert.equal(
+    await page.locator(".files-address").getAttribute("title"),
+    fixtureRoot,
+  );
+  assert.equal(
+    await page.getByRole("button", { name: "Parent folder" }).isDisabled(),
+    true,
+  );
   assert.doesNotMatch(
     await page.locator(".file-preview").textContent() ?? "",
     /slow-preview-marker/u,
@@ -335,7 +350,7 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   await page.getByRole("button", { name: "missing-next" }).waitFor();
   await rm(join(fixtureRoot, "vanishing"), { recursive: true, force: true });
   await page.getByRole("button", { name: "missing-next" }).click();
-  await page.locator(".file-preview .error-state").waitFor();
+  await page.getByText("Unable to load this folder.", { exact: true }).waitFor();
   assert.equal(await page.locator(".file-row").count(), 0);
 
   await page.screenshot({ path: join(artifacts, "standalone-workspace.png") });

@@ -124,15 +124,19 @@ function FilesTool({
     setParent(undefined);
     void window.oruDesktop.files.list({ path, root }).then((result) => {
       if (!active) return;
+      setPath(result.path);
       setEntries(result.entries);
       setParent(result.parent);
     }).catch((reason: unknown) => {
-      if (active) setError(reason instanceof Error ? reason.message : String(reason));
+      if (active) {
+        console.warn("Unable to list Files directory:", reason);
+        setError(t("ui.files.loadFailed"));
+      }
     }).finally(() => {
       if (active) setLoading(false);
     });
     return () => { active = false; };
-  }, [path, root]);
+  }, [path, root, t]);
 
   const choose = (entry: FileManagerEntry): void => {
     const request = ++previewRequest.current;
@@ -148,7 +152,8 @@ function FilesTool({
       })
       .catch((reason: unknown) => {
         if (previewRequest.current === request) {
-          setError(reason instanceof Error ? reason.message : String(reason));
+          console.warn("Unable to preview Files entry:", reason);
+          setError(t("ui.files.previewFailed"));
         }
       });
   };
