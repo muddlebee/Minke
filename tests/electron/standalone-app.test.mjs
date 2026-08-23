@@ -41,6 +41,9 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   await writeFile(join(fixtureRoot, "slow.txt"), slowPreview);
   await mkdir(join(fixtureRoot, "src"));
   await writeFile(join(fixtureRoot, "src", "index.ts"), "export const ready = true;\n", "utf8");
+  await mkdir(join(fixtureRoot, "vanishing"));
+  await mkdir(join(fixtureRoot, "vanishing", "missing-next"));
+  await writeFile(join(fixtureRoot, "vanishing", "stale.txt"), "stale-row-marker\n", "utf8");
   await writeFile(join(fixtureRoot, "src", "slow-child.txt"), slowPreview);
   await writeFile(join(secondFixtureRoot, "second.txt"), "second-workspace-marker\n", "utf8");
   const server = await startFixtureServer();
@@ -120,6 +123,13 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   await page.waitForFunction(() => document.querySelector(".session-row")?.getAttribute("data-active") === "true");
   assert.equal(await page.locator(".session-row").first().getAttribute("data-active"), "true");
 
+  const composer = page.getByRole("textbox", { name: "Message" });
+  await composer.fill("first-session-unsent-draft");
+  await page.locator(".session-row").nth(1).click();
+  assert.equal(await composer.inputValue(), "");
+  await page.locator(".session-row").first().click();
+  assert.equal(await composer.inputValue(), "");
+
   await page.evaluate(() => {
     const rows = [...document.querySelectorAll(".file-row")];
     const slow = rows.find((row) => row.textContent?.includes("slow.txt"));
@@ -155,13 +165,19 @@ test("standalone Electron shell supports the primary workspace workflow", { time
     /slow-preview-marker/u,
   );
 
+  await page.getByRole("button", { name: "vanishing" }).click();
+  await page.getByRole("button", { name: "missing-next" }).waitFor();
+  await rm(join(fixtureRoot, "vanishing"), { recursive: true, force: true });
+  await page.getByRole("button", { name: "missing-next" }).click();
+  await page.locator(".file-preview .error-state").waitFor();
+  assert.equal(await page.locator(".file-row").count(), 0);
+
   await page.getByRole("button", { name: /Open (?:a )?folder/iu }).first().click();
   await page.getByText(secondFixtureRoot, { exact: true }).first().waitFor();
   await page.getByRole("button", { name: "second.txt" }).waitFor();
   await page.locator(".sidebar-row", { hasText: basename(fixtureRoot) }).click();
   await page.getByRole("button", { name: "hello.txt" }).waitFor();
 
-  const composer = page.getByRole("textbox", { name: "Message" });
   await composer.fill("Explain the adapter boundary");
   await composer.press("Enter");
   await page.getByText("Inspect workspace", { exact: true }).waitFor();
@@ -193,6 +209,15 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   await page.keyboard.type("printf 'oru-terminal-marker\\n'");
   await page.keyboard.press("Enter");
   await page.locator(".xterm-rows").getByText("oru-terminal-marker", { exact: true }).waitFor({ timeout: 8_000 });
+  await terminal.click();
+  await page.keyboard.type("export ORU_PERSIST_TEST=kept");
+  await page.keyboard.press("Enter");
+  await page.getByRole("tab", { name: "Files" }).click();
+  await page.getByRole("tab", { name: "Terminal" }).click();
+  await terminal.click();
+  await page.keyboard.type("printf 'session-%s\\n' \"$ORU_PERSIST_TEST\"");
+  await page.keyboard.press("Enter");
+  await page.locator(".xterm-rows").getByText("session-kept", { exact: true }).waitFor({ timeout: 8_000 });
 
   await page.getByRole("button", { name: "Settings" }).click();
   await page.getByRole("dialog", { name: "Settings" }).waitFor();

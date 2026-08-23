@@ -212,7 +212,7 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
               onOpen={() => void openWorkspace()}
               t={t}
             />
-          : <Conversation session={activeSession} runtime={runtime} t={t} />}
+          : <Conversation key={activeSession.id} session={activeSession} runtime={runtime} t={t} />}
       </section>
       {toolsOpen && activeWorkspace !== undefined && (
         <Suspense fallback={<aside className="tool-panel"><p className="muted-state">{t("ui.tools.loading")}</p></aside>}>

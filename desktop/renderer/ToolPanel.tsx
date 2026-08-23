@@ -37,6 +37,7 @@ export function ToolPanel(props: {
   onClose(): void;
 }): ReactNode {
   const [active, setActive] = useState<ToolKind>("files");
+  const [terminalOpened, setTerminalOpened] = useState(false);
   const t: Translate = useCallback(
     (key, params) => translateDesktop(props.locale, key, params),
     [props.locale],
@@ -50,7 +51,10 @@ export function ToolPanel(props: {
               className="tool-tab"
               data-active={active === kind}
               key={kind}
-              onClick={() => setActive(kind)}
+              onClick={() => {
+                setActive(kind);
+                if (kind === "terminal") setTerminalOpened(true);
+              }}
               role="tab"
               aria-selected={active === kind}
               type="button"
@@ -63,7 +67,13 @@ export function ToolPanel(props: {
       </header>
       <div className="tool-panel__body">
         {active === "files" && <FilesTool root={props.workspace.path} t={t} />}
-        {active === "terminal" && <TerminalTool cwd={props.workspace.path} t={t} />}
+        {terminalOpened && (
+          <TerminalTool
+            cwd={props.workspace.path}
+            hidden={active !== "terminal"}
+            t={t}
+          />
+        )}
         {active === "web" && <WebTool t={t} />}
       </div>
     </aside>
@@ -95,6 +105,8 @@ function FilesTool({ root, t }: { root: string; t: Translate }): ReactNode {
     setLoading(true);
     setError(undefined);
     setPreview(undefined);
+    setEntries([]);
+    setParent(undefined);
     void window.oruDesktop.files.list({ path }).then((result) => {
       if (!active) return;
       setEntries(result.entries);
@@ -160,7 +172,15 @@ function FilesTool({ root, t }: { root: string; t: Translate }): ReactNode {
   );
 }
 
-function TerminalTool({ cwd, t }: { cwd: string; t: Translate }): ReactNode {
+function TerminalTool({
+  cwd,
+  hidden,
+  t,
+}: {
+  cwd: string;
+  hidden: boolean;
+  t: Translate;
+}): ReactNode {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [error, setError] = useState<string>();
 
@@ -268,7 +288,7 @@ function TerminalTool({ cwd, t }: { cwd: string; t: Translate }): ReactNode {
   }, [cwd, t]);
 
   return (
-    <div className="terminal-tool">
+    <div className="terminal-tool" hidden={hidden}>
       {error !== undefined && <p className="error-state">{error}</p>}
       <div className="terminal-host" ref={hostRef} />
     </div>
