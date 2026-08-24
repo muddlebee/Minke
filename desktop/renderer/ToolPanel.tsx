@@ -99,6 +99,7 @@ export function ToolPanel(props: {
                 if (tab.kind === "web") setWebOpened(true);
               }}
               role="tab"
+              aria-label={t(tab.label)}
               aria-selected={active === tab.kind}
               type="button"
             >
@@ -150,9 +151,16 @@ function buildCrumbs(root: string, path: string): readonly Crumb[] {
   const rootName = root.split(/[\\/]/u).filter(Boolean).at(-1) ?? root;
   const crumbs: Crumb[] = [{ name: rootName, path: root }];
   if (!path.startsWith(root)) return crumbs;
-  for (const match of path.slice(root.length).matchAll(/[\\/]+([^\\/]+)/gu)) {
+  const relative = path.slice(root.length);
+  if (
+    relative === "" ||
+    (!/[\\/]$/u.test(root) && !/^[\\/]/u.test(relative))
+  ) {
+    return crumbs;
+  }
+  for (const match of relative.matchAll(/[^\\/]+/gu)) {
     const end = root.length + (match.index ?? 0) + match[0].length;
-    crumbs.push({ name: match[1] ?? "", path: path.slice(0, end) });
+    crumbs.push({ name: match[0], path: path.slice(0, end) });
   }
   return crumbs;
 }
