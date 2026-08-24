@@ -112,7 +112,7 @@ function FilesTool({
     previewRequest.current += 1;
     setPreview(undefined);
     setError(undefined);
-    setParent(path);
+    setParent((current) => current ?? path);
     setPath(nextPath);
   };
 
@@ -351,9 +351,10 @@ function WebTool({
     view.setAttribute("webpreferences", "contextIsolation=yes,nodeIntegration=no,sandbox=yes,webSecurity=yes");
     const syncAddress = (event: Event): void => {
       navigationRequest.current += 1;
-      const normalized = normalizeWebTabUrl(
-        (event as OruWebviewNavigationEvent).url,
-      );
+      const candidate = (event as OruWebviewNavigationEvent).url;
+      const normalized = typeof candidate === "string"
+        ? normalizeWebTabUrl(candidate)
+        : undefined;
       if (normalized === undefined) {
         setInput("");
         setError(t("ui.web.invalid"));

@@ -8,7 +8,6 @@ import type {
   DesktopMessageKey,
 } from "@minke/desktop/i18n.ts";
 import {
-  DEFAULT_SHORTCUT_BINDINGS,
   isShortcutBinding,
   parseShortcutBindings,
   resolveProductShortcutBindings,
