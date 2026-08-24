@@ -390,7 +390,7 @@ kbd { padding: 2px 6px; border: 1px solid var(--border); border-radius: 5px; bac
   .tool-tab span { display: none; }
   .tool-tab { padding-inline: 8px; }
 }
-@media (max-width: 880px) {
+@media (max-width: 910px) {
   .app-shell, .app-shell[data-tools-open="true"] { grid-template-columns: 68px minmax(0, 1fr); }
   .app-shell[data-sidebar-open="false"], .app-shell[data-sidebar-open="false"][data-tools-open="true"] { grid-template-columns: minmax(0, 1fr); }
   .sidebar { padding-inline: 8px; }
