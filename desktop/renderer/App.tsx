@@ -28,6 +28,7 @@ import {
   type AgentRuntime,
   type AgentSession,
 } from "./agent-runtime";
+import { Icon } from "./Icon";
 
 const ToolPanel = lazy(async () => {
   const module = await import("./ToolPanel");
@@ -46,6 +47,42 @@ type Translate = (
   params?: DesktopTranslateParams,
 ) => string;
 const THEME_STORAGE_KEY = "oru.ui.theme.v1";
+
+/**
+ * Shorten a workspace path to its trailing segments.
+ *
+ * Plain CSS truncation keeps the useless head of a path (`/home/me/Code/…`),
+ * and the usual `direction: rtl` workaround reorders the separators because
+ * they are bidi-neutral. Trimming in advance keeps the identifying tail and
+ * leaves the full path on the element's `title`.
+ */
+function shortenPath(path: string): string {
+  const segments = path.split(/[\\/]/u).filter(Boolean);
+  if (segments.length <= 2) return path;
+  return `…/${segments.slice(-2).join("/")}`;
+}
+
+/**
+ * When a session was last worked in.
+ *
+ * `DemoAgentRuntime.createSession` prepends, so the raw array is ordered by
+ * creation. That buries a session you returned to and messaged under newer
+ * ones you never touched. The newest message is the closest stand-in for
+ * activity that the runtime contract already carries.
+ */
+function lastActivityAt(session: AgentSession): number {
+  return session.messages.at(-1)?.createdAt ?? 0;
+}
+
+/** One workspace's sessions, most recently active first. */
+function workspaceSessions(
+  sessions: readonly AgentSession[],
+  workspaceId: string | undefined,
+): readonly AgentSession[] {
+  return sessions
+    .filter((session) => session.workspaceId === workspaceId)
+    .sort((left, right) => lastActivityAt(right) - lastActivityAt(left));
+}
 
 function useRuntime(runtime: AgentRuntime) {
   const subscribe = useCallback(
@@ -159,13 +196,8 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
   const selectWorkspace = useCallback((workspace: DesktopWorkspace): void => {
     setActiveWorkspaceId(workspace.id);
     const remembered = lastSessionByWorkspace.current.get(workspace.id);
-    const session = snapshot.sessions.find(
-      (item) =>
-        item.workspaceId === workspace.id &&
-        item.id === remembered,
-    ) ?? snapshot.sessions.find(
-      (item) => item.workspaceId === workspace.id,
-    );
+    const ordered = workspaceSessions(snapshot.sessions, workspace.id);
+    const session = ordered.find((item) => item.id === remembered) ?? ordered[0];
     if (session !== undefined) runtime.selectSession(session.id);
   }, [runtime, snapshot.sessions]);
 
@@ -195,8 +227,9 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
 
   const moveSession = useCallback((direction: "back" | "forward"): void => {
     if (activeWorkspace === undefined) return;
-    const visible = snapshot.sessions.filter(
-      (session) => session.workspaceId === activeWorkspace.id,
+    const visible = workspaceSessions(
+      snapshot.sessions,
+      activeWorkspace.id,
     );
     const currentIndex = visible.findIndex(
       (session) => session.id === snapshot.activeSessionId,
@@ -268,10 +301,18 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
       )}
       <section className="conversation-pane">
         <header className="conversation-header">
-          <div><h1>{activeSession?.title ?? "Oru"}</h1><p>{activeWorkspace?.path ?? t("ui.agentWorkspace")}</p></div>
+          <div>
+            <h1>{activeSession?.title ?? "Oru"}</h1>
+            <p title={activeWorkspace?.path}>
+              {activeWorkspace === undefined
+                ? t("ui.agentWorkspace")
+                : shortenPath(activeWorkspace.path)}
+            </p>
+          </div>
           <div className="header-actions">
             <span className="runtime-badge"><span />{runtimeLabel}</span>
             <button className="compact-button" disabled={activeWorkspace === undefined} onClick={() => setToolsOpen((value) => !value)} type="button">
+              <Icon name="panelRight" size={14} />
               {toolsOpen ? t("ui.tools.hide") : t("ui.tools.show")}
             </button>
           </div>
@@ -392,26 +433,26 @@ function Sidebar(props: {
   onNewSession(): void;
   onOpenSettings(): void;
 }): ReactNode {
-  const visibleSessions = props.sessions.filter((session) => session.workspaceId === props.activeWorkspaceId);
+  const visibleSessions = workspaceSessions(props.sessions, props.activeWorkspaceId);
   return (
     <aside className="sidebar">
       <div className="sidebar__brand"><img src="./oru.svg" alt="" /><strong>Oru</strong></div>
-      <button className="primary-button" onClick={props.onOpenWorkspace} type="button"><span aria-hidden="true">＋</span> {props.t("ui.command.openFolder")}</button>
+      <button className="primary-button" onClick={props.onOpenWorkspace} type="button"><Icon name="plus" /> {props.t("ui.command.openFolder")}</button>
       <div className="sidebar__section">
         <div className="section-label"><span>{props.t("ui.sidebar.workspaces")}</span><span>{props.workspaces.length}</span></div>
         <div className="sidebar-list">
           {props.workspaces.length === 0 && <p className="sidebar-empty">{props.t("ui.sidebar.empty")}</p>}
           {props.workspaces.map((workspace) => (
-            <button className="sidebar-row" data-active={workspace.id === props.activeWorkspaceId} key={workspace.id} onClick={() => props.onSelectWorkspace(workspace)} type="button">
+            <button className="sidebar-row" data-active={workspace.id === props.activeWorkspaceId} key={workspace.id} onClick={() => props.onSelectWorkspace(workspace)} title={workspace.path} type="button">
               <span className="workspace-mark">{workspace.name.slice(0, 1).toUpperCase()}</span>
-              <span className="sidebar-row__copy"><strong>{workspace.name}</strong><small>{workspace.path}</small></span>
+              <span className="sidebar-row__copy"><strong>{workspace.name}</strong><small>{shortenPath(workspace.path)}</small></span>
             </button>
           ))}
         </div>
       </div>
       {props.activeWorkspaceId !== undefined && (
         <div className="sidebar__section sidebar__section--sessions">
-          <div className="section-label"><span>{props.t("ui.sidebar.sessions")}</span><button className="section-add" onClick={props.onNewSession} type="button" aria-label={props.t("ui.sidebar.newSession")}>＋</button></div>
+          <div className="section-label"><span>{props.t("ui.sidebar.sessions")}</span><button className="section-add" onClick={props.onNewSession} type="button" aria-label={props.t("ui.sidebar.newSession")}><Icon name="plus" size={14} /></button></div>
           <div className="sidebar-list">
             {visibleSessions.map((session) => (
               <button className="session-row" data-active={session.id === props.activeSessionId} key={session.id} onClick={() => props.onSelectSession(session.id)} type="button">
@@ -422,7 +463,7 @@ function Sidebar(props: {
         </div>
       )}
       <div className="sidebar__footer">
-        <button className="sidebar-footer-button" onClick={props.onOpenSettings} type="button">⚙ <span>{props.t("ui.settings.title")}</span></button>
+        <button className="sidebar-footer-button" onClick={props.onOpenSettings} type="button"><Icon name="sliders" size={14} /> <span>{props.t("ui.settings.title")}</span></button>
         <span className="sidebar-runtime">{props.runtimeLabel}</span>
       </div>
     </aside>
@@ -477,7 +518,7 @@ function Conversation({
       <div className="message-scroll"><div className="message-list">
         {session.messages.map((message) => (
           <article className="message" data-role={message.role} key={message.id}>
-            <div className="message__avatar">{message.role === "assistant" ? "O" : t("ui.message.you").toUpperCase()}</div>
+            <div className="message__avatar">{message.role === "assistant" ? "O" : t("ui.message.you").slice(0, 1).toUpperCase()}</div>
             <div className="message__body"><div className="message__meta">{message.role === "assistant" ? "Oru" : t("ui.message.you")}{message.interrupted ? ` · ${t("ui.message.interrupted")}` : ""}</div><p>{message.content}</p></div>
           </article>
         ))}
@@ -485,7 +526,12 @@ function Conversation({
           <div className="activity-card" aria-label={t("ui.message.activity")}>
             {session.activities.map((item) => (
               <div className="activity-row" data-state={item.state} key={item.id}>
-                <span>{item.state === "complete" ? "✓" : item.state === "interrupted" ? "×" : "·"}</span>
+                <span>
+                  <Icon
+                    name={item.state === "complete" ? "check" : item.state === "interrupted" ? "x" : "dot"}
+                    size={12}
+                  />
+                </span>
                 <div><strong>{item.label}</strong><small>{item.detail}</small></div>
               </div>
             ))}
@@ -503,8 +549,8 @@ function Conversation({
         <div className="composer__footer">
           <span>{t("ui.composer.hint")}</span>
           {session.status === "idle"
-            ? <button className="send-button" disabled={draft.trim() === ""} type="submit" aria-label={t("ui.composer.send")}>↑</button>
-            : <button className="stop-button" onClick={() => runtime.abort(session.id)} type="button">■ {t("ui.composer.stop")}</button>}
+            ? <button className="send-button" disabled={draft.trim() === ""} type="submit" aria-label={t("ui.composer.send")}><Icon name="arrowUp" /></button>
+            : <button className="stop-button" onClick={() => runtime.abort(session.id)} type="button"><Icon name="square" size={12} /> {t("ui.composer.stop")}</button>}
         </div>
       </form>
     </div>
@@ -522,7 +568,7 @@ function SettingsDialog(props: {
   return (
     <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && props.onClose()}>
       <section className="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-        <header><div><p className="eyebrow">{props.t("ui.settings.eyebrow")}</p><h2 id="settings-title">{props.t("ui.settings.title")}</h2></div><button className="icon-button" onClick={props.onClose} type="button" aria-label={props.t("ui.settings.close")}>×</button></header>
+        <header><div><p className="eyebrow">{props.t("ui.settings.eyebrow")}</p><h2 id="settings-title">{props.t("ui.settings.title")}</h2></div><button className="icon-button icon-button--ghost" onClick={props.onClose} type="button" aria-label={props.t("ui.settings.close")}><Icon name="x" /></button></header>
         <div className="settings-section"><div><strong>{props.t("ui.settings.appearance")}</strong><p>{props.t("ui.settings.appearanceDetail")}</p></div><div className="segmented">
           {(["system", "light", "dark"] as const).map((item) => <button data-active={props.theme === item} key={item} onClick={() => props.onTheme(item)} type="button">{props.t(`ui.settings.${item}`)}</button>)}
         </div></div>
