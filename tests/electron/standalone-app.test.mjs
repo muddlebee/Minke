@@ -390,6 +390,26 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   await page.getByRole("button", { name: "Parent folder" }).click();
   await page.getByRole("button", { name: "hello.txt" }).waitFor();
 
+  // Sessions order by last activity, not by creation. Reviving the older
+  // session must lift it above newer ones that were never worked in.
+  const sessionTitles = async () =>
+    page.locator(".session-row span").allTextContents();
+  const beforeRevival = await sessionTitles();
+  assert.equal(beforeRevival.length, 2, `expected two sessions: ${beforeRevival.join(", ")}`);
+  await page.locator(".session-row").nth(1).click();
+  await composer.fill("revived-older-session");
+  await composer.press("Enter");
+  await page.waitForFunction(
+    () => document.querySelector(".session-row span")?.textContent ===
+      "revived-older-session",
+    undefined,
+    { timeout: 8_000 },
+  );
+  assert.equal(
+    await page.locator(".session-row").first().getAttribute("data-active"),
+    "true",
+  );
+
   await page.screenshot({ path: join(artifacts, "standalone-workspace.png") });
   assert.deepEqual(rendererErrors, [], `renderer errors:\n${rendererErrors.join("\n")}`);
 });

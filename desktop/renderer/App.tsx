@@ -62,6 +62,28 @@ function shortenPath(path: string): string {
   return `…/${segments.slice(-2).join("/")}`;
 }
 
+/**
+ * When a session was last worked in.
+ *
+ * `DemoAgentRuntime.createSession` prepends, so the raw array is ordered by
+ * creation. That buries a session you returned to and messaged under newer
+ * ones you never touched. The newest message is the closest stand-in for
+ * activity that the runtime contract already carries.
+ */
+function lastActivityAt(session: AgentSession): number {
+  return session.messages.at(-1)?.createdAt ?? 0;
+}
+
+/** One workspace's sessions, most recently active first. */
+function workspaceSessions(
+  sessions: readonly AgentSession[],
+  workspaceId: string | undefined,
+): readonly AgentSession[] {
+  return sessions
+    .filter((session) => session.workspaceId === workspaceId)
+    .sort((left, right) => lastActivityAt(right) - lastActivityAt(left));
+}
+
 function useRuntime(runtime: AgentRuntime) {
   const subscribe = useCallback(
     (listener: () => void) => runtime.subscribe(listener),
@@ -174,13 +196,8 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
   const selectWorkspace = useCallback((workspace: DesktopWorkspace): void => {
     setActiveWorkspaceId(workspace.id);
     const remembered = lastSessionByWorkspace.current.get(workspace.id);
-    const session = snapshot.sessions.find(
-      (item) =>
-        item.workspaceId === workspace.id &&
-        item.id === remembered,
-    ) ?? snapshot.sessions.find(
-      (item) => item.workspaceId === workspace.id,
-    );
+    const ordered = workspaceSessions(snapshot.sessions, workspace.id);
+    const session = ordered.find((item) => item.id === remembered) ?? ordered[0];
     if (session !== undefined) runtime.selectSession(session.id);
   }, [runtime, snapshot.sessions]);
 
@@ -210,8 +227,9 @@ export default function App({ locale, runtime: providedRuntime }: AppProps): Rea
 
   const moveSession = useCallback((direction: "back" | "forward"): void => {
     if (activeWorkspace === undefined) return;
-    const visible = snapshot.sessions.filter(
-      (session) => session.workspaceId === activeWorkspace.id,
+    const visible = workspaceSessions(
+      snapshot.sessions,
+      activeWorkspace.id,
     );
     const currentIndex = visible.findIndex(
       (session) => session.id === snapshot.activeSessionId,
@@ -415,7 +433,7 @@ function Sidebar(props: {
   onNewSession(): void;
   onOpenSettings(): void;
 }): ReactNode {
-  const visibleSessions = props.sessions.filter((session) => session.workspaceId === props.activeWorkspaceId);
+  const visibleSessions = workspaceSessions(props.sessions, props.activeWorkspaceId);
   return (
     <aside className="sidebar">
       <div className="sidebar__brand"><img src="./oru.svg" alt="" /><strong>Oru</strong></div>
