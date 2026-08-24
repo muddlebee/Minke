@@ -1,7 +1,7 @@
-/** Renderer-to-main channel carrying Harness's active locale. */
-export const WINDOW_LOCALE_CHANNEL = "minke:window-locale";
+/** Renderer-to-main channel carrying the desktop UI's active locale. */
+export const WINDOW_LOCALE_CHANNEL = "oru:window-locale";
 
-/** Locale identifiers currently shipped by DeepSeek Harness. */
+/** Locale identifiers currently shipped by the standalone desktop UI. */
 export type DesktopLocale = "zh" | "en";
 
 /** Validate untrusted locale data crossing the preload boundary. */
@@ -10,7 +10,7 @@ export function isDesktopLocale(value: unknown): value is DesktopLocale {
 }
 
 /**
- * Resolve Electron's application locale to one of Harness's shipped locales.
+ * Resolve Electron's application locale to one of the UI's shipped locales.
  * Chinese variants stay Chinese; every other or absent value falls back to
  * English as the desktop bootstrap default.
  */

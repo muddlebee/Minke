@@ -8,29 +8,16 @@ import type {
 import { isAbsolute } from "node:path";
 import { stat } from "node:fs/promises";
 import {
-  parseTabsLayoutStateUpdate,
-  TABS_LAYOUT_STATE_READ_CHANNEL,
-  TABS_LAYOUT_STATE_WRITE_CHANNEL,
   TABS_OPEN_EXTERNAL_CHANNEL,
 } from "@minke/harness-overlay/tabs/contract.ts";
 import {
-  parseFileManagerDiffRequest,
   parseFileManagerListRequest,
   parseFileManagerOpenRequest,
   parseFileManagerPreviewRequest,
-  parseFileManagerUnwatchRequest,
-  parseFileManagerViewStateUpdate,
-  parseFileManagerWatchRequest,
   parseFileManagerWriteRequest,
-  TABS_FILES_DIFF_CHANNEL,
-  TABS_FILES_CHANGE_CHANNEL,
   TABS_FILES_LIST_CHANNEL,
   TABS_FILES_OPEN_CHANNEL,
   TABS_FILES_PREVIEW_CHANNEL,
-  TABS_FILES_UNWATCH_CHANNEL,
-  TABS_FILES_VIEW_STATE_READ_CHANNEL,
-  TABS_FILES_VIEW_STATE_WRITE_CHANNEL,
-  TABS_FILES_WATCH_CHANNEL,
   TABS_FILES_WRITE_CHANNEL,
 } from "@minke/harness-overlay/tabs/files-contract.ts";
 import {
@@ -48,15 +35,6 @@ import {
   FileManagerRuntime,
 } from "./files.ts";
 import {
-  FileWatchRuntime,
-} from "./file-watch.ts";
-import {
-  FilesViewStateStore,
-} from "./files-view-state.ts";
-import {
-  TabsLayoutStateStore,
-} from "./layout-state.ts";
-import {
   openNormalizedTabExternally,
   protectTabWebviewGuest,
   secureTabWebview,
@@ -72,24 +50,36 @@ import {
   TerminalSessionRuntime,
 } from "./terminal.ts";
 
-interface TabsBindingOptions {
-  readonly runtimeRoot: string;
-  readonly electronExecutable: string;
-  readonly defaultCwd: string;
-  readonly fileSystemRoot: string;
-  readonly minkeConfigPath: string;
-  readonly environment: NodeJS.ProcessEnv;
+interface AuthorizedPath {
+  readonly path: string;
+  readonly root: string;
 }
 
-async function resolveTerminalCwd(candidate: string): Promise<string> {
+interface TabsBindingOptions {
+  readonly runtimeRoot?: string;
+  readonly defaultCwd: string;
+  readonly fileSystemRoot: string;
+  readonly authorizePath?: (
+    candidate: string,
+    root?: string,
+  ) => Promise<AuthorizedPath>;
+}
+
+async function resolveTerminalCwd(
+  candidate: string,
+  authorizePath?: (candidate: string) => Promise<AuthorizedPath>,
+): Promise<string> {
   if (!isAbsolute(candidate)) {
     throw new TypeError("terminal working directory must be absolute");
   }
-  const details = await stat(candidate);
+  const path = authorizePath === undefined
+    ? candidate
+    : (await authorizePath(candidate)).path;
+  const details = await stat(path);
   if (!details.isDirectory()) {
     throw new TypeError("terminal working directory must be a directory");
   }
-  return candidate;
+  return path;
 }
 
 function defaultTerminalShell(): {
@@ -110,7 +100,7 @@ function defaultTerminalShell(): {
 
 /**
  * Bind the trusted main-process half of the Web tab adapter.
- * Renderer requests are accepted only from the active Harness document.
+ * Renderer requests are accepted only from the active desktop document.
  */
 export function bindTabs(
   ipc: Pick<
@@ -127,34 +117,35 @@ export function bindTabs(
     pty: loadTerminalPty(options.runtimeRoot),
     shell: terminalShell.shell,
     shellArgs: terminalShell.args,
-    runtimeRoot: options.runtimeRoot,
-    electronExecutable: options.electronExecutable,
     defaultCwd: options.defaultCwd,
-    environment: options.environment,
-    resolveCwd: resolveTerminalCwd,
+    environment: process.env,
+    resolveCwd: (candidate) => resolveTerminalCwd(
+      candidate,
+      options.authorizePath,
+    ),
     send: (event) => {
       if (!embedder.isDestroyed()) {
         embedder.send(TABS_TERMINAL_EVENT_CHANNEL, event);
       }
     },
   });
-  const files = new FileManagerRuntime({
-    rootPath: options.fileSystemRoot,
-    openPath: (path) => external.openPath(path),
-  });
-  const filesViewState = new FilesViewStateStore(
-    options.minkeConfigPath,
-  );
-  const tabsLayoutState = new TabsLayoutStateStore(
-    options.minkeConfigPath,
-  );
-  const fileWatch = new FileWatchRuntime({
-    send: (event) => {
-      if (!embedder.isDestroyed()) {
-        embedder.send(TABS_FILES_CHANGE_CHANNEL, event);
-      }
-    },
-  });
+  const fileManagers = new Map<string, FileManagerRuntime>();
+  const fileManager = (root: string): FileManagerRuntime => {
+    const existing = fileManagers.get(root);
+    if (existing !== undefined) return existing;
+    const created = new FileManagerRuntime({
+      rootPath: root,
+      openPath: (path) => external.openPath(path),
+    });
+    fileManagers.set(root, created);
+    return created;
+  };
+  const authorizeFilePath = async (
+    path: string,
+    root?: string,
+  ): Promise<AuthorizedPath> => options.authorizePath === undefined
+    ? { path, root: root ?? options.fileSystemRoot }
+    : await options.authorizePath(path, root);
   const handleWillAttach = (
     event: Electron.Event,
     webPreferences: WebPreferences,
@@ -176,25 +167,6 @@ export function bindTabs(
   ): void => {
     if (!authorize(event)) return;
     openNormalizedTabExternally(external, candidate);
-  };
-  const handleTabsLayoutStateRead = async (
-    event: IpcMainInvokeEvent,
-  ): Promise<unknown> => {
-    if (!authorize(event)) {
-      throw new Error("unauthorized Tabs request");
-    }
-    return await tabsLayoutState.read();
-  };
-  const handleTabsLayoutStateWrite = async (
-    event: IpcMainInvokeEvent,
-    update: unknown,
-  ): Promise<void> => {
-    if (!authorize(event)) {
-      throw new Error("unauthorized Tabs request");
-    }
-    await tabsLayoutState.write(
-      parseTabsLayoutStateUpdate(update),
-    );
   };
   const handleTerminalCreate = async (
     event: IpcMainInvokeEvent,
@@ -247,20 +219,17 @@ export function bindTabs(
     if (!authorize(event)) {
       throw new Error("unauthorized Files request");
     }
-    return await files.list(
-      parseFileManagerListRequest(request),
-    );
-  };
-  const handleFilesDiff = async (
-    event: IpcMainInvokeEvent,
-    request: unknown,
-  ): Promise<unknown> => {
-    if (!authorize(event)) {
-      throw new Error("unauthorized Files request");
-    }
-    return await files.diff(
-      parseFileManagerDiffRequest(request),
-    );
+    const parsed = parseFileManagerListRequest(request);
+    const path = parsed.path === undefined
+      ? options.fileSystemRoot
+      : parsed.path;
+    const authorized = await authorizeFilePath(path, parsed.root);
+    return await fileManager(authorized.root).list({
+      path: authorized.path,
+      ...(parsed.includeRepository === undefined
+        ? {}
+        : { includeRepository: parsed.includeRepository }),
+    });
   };
   const handleFilesOpen = async (
     event: IpcMainInvokeEvent,
@@ -269,7 +238,9 @@ export function bindTabs(
     if (!authorize(event)) {
       throw new Error("unauthorized Files request");
     }
-    await files.open(parseFileManagerOpenRequest(request));
+    const parsed = parseFileManagerOpenRequest(request);
+    const authorized = await authorizeFilePath(parsed.path, parsed.root);
+    await fileManager(authorized.root).open({ path: authorized.path });
   };
   const handleFilesPreview = async (
     event: IpcMainInvokeEvent,
@@ -278,9 +249,11 @@ export function bindTabs(
     if (!authorize(event)) {
       throw new Error("unauthorized Files request");
     }
-    return await files.preview(
-      parseFileManagerPreviewRequest(request),
-    );
+    const parsed = parseFileManagerPreviewRequest(request);
+    const authorized = await authorizeFilePath(parsed.path, parsed.root);
+    return await fileManager(authorized.root).preview({
+      path: authorized.path,
+    });
   };
   const handleFilesWrite = async (
     event: IpcMainInvokeEvent,
@@ -289,82 +262,26 @@ export function bindTabs(
     if (!authorize(event)) {
       throw new Error("unauthorized Files request");
     }
-    return await files.write(
-      parseFileManagerWriteRequest(request),
-    );
-  };
-  const handleFilesViewStateRead = async (
-    event: IpcMainInvokeEvent,
-  ): Promise<unknown> => {
-    if (!authorize(event)) {
-      throw new Error("unauthorized Files request");
-    }
-    return await filesViewState.read();
-  };
-  const handleFilesViewStateWrite = async (
-    event: IpcMainInvokeEvent,
-    update: unknown,
-  ): Promise<void> => {
-    if (!authorize(event)) {
-      throw new Error("unauthorized Files request");
-    }
-    await filesViewState.write(
-      parseFileManagerViewStateUpdate(update),
-    );
-  };
-  const handleFilesWatch = (
-    event: IpcMainEvent,
-    request: unknown,
-  ): void => {
-    if (!authorize(event)) return;
-    try {
-      fileWatch.watch(parseFileManagerWatchRequest(request));
-    } catch {
-      // Invalid or unavailable watch targets do not affect other Files tabs.
-    }
-  };
-  const handleFilesUnwatch = (
-    event: IpcMainEvent,
-    request: unknown,
-  ): void => {
-    if (!authorize(event)) return;
-    try {
-      fileWatch.unwatch(parseFileManagerUnwatchRequest(request));
-    } catch {
-      // Invalid watcher ids cannot own a main-process filesystem watcher.
-    }
+    const parsed = parseFileManagerWriteRequest(request);
+    const authorized = await authorizeFilePath(parsed.path, parsed.root);
+    return await fileManager(authorized.root).write({
+      path: authorized.path,
+      content: parsed.content,
+      expectedVersion: parsed.expectedVersion,
+    });
   };
 
   embedder.on("will-attach-webview", handleWillAttach);
   embedder.on("did-attach-webview", handleDidAttach);
   ipc.on(TABS_OPEN_EXTERNAL_CHANNEL, handleOpenExternal);
-  ipc.handle(
-    TABS_LAYOUT_STATE_READ_CHANNEL,
-    handleTabsLayoutStateRead,
-  );
-  ipc.handle(
-    TABS_LAYOUT_STATE_WRITE_CHANNEL,
-    handleTabsLayoutStateWrite,
-  );
   ipc.handle(TABS_TERMINAL_CREATE_CHANNEL, handleTerminalCreate);
   ipc.on(TABS_TERMINAL_WRITE_CHANNEL, handleTerminalWrite);
   ipc.on(TABS_TERMINAL_RESIZE_CHANNEL, handleTerminalResize);
   ipc.on(TABS_TERMINAL_CLOSE_CHANNEL, handleTerminalClose);
   ipc.handle(TABS_FILES_LIST_CHANNEL, handleFilesList);
-  ipc.handle(TABS_FILES_DIFF_CHANNEL, handleFilesDiff);
   ipc.handle(TABS_FILES_OPEN_CHANNEL, handleFilesOpen);
   ipc.handle(TABS_FILES_PREVIEW_CHANNEL, handleFilesPreview);
   ipc.handle(TABS_FILES_WRITE_CHANNEL, handleFilesWrite);
-  ipc.handle(
-    TABS_FILES_VIEW_STATE_READ_CHANNEL,
-    handleFilesViewStateRead,
-  );
-  ipc.handle(
-    TABS_FILES_VIEW_STATE_WRITE_CHANNEL,
-    handleFilesViewStateWrite,
-  );
-  ipc.on(TABS_FILES_WATCH_CHANNEL, handleFilesWatch);
-  ipc.on(TABS_FILES_UNWATCH_CHANNEL, handleFilesUnwatch);
 
   let disposed = false;
   return {
@@ -377,8 +294,6 @@ export function bindTabs(
         TABS_OPEN_EXTERNAL_CHANNEL,
         handleOpenExternal,
       );
-      ipc.removeHandler(TABS_LAYOUT_STATE_READ_CHANNEL);
-      ipc.removeHandler(TABS_LAYOUT_STATE_WRITE_CHANNEL);
       ipc.removeHandler(TABS_TERMINAL_CREATE_CHANNEL);
       ipc.removeListener(
         TABS_TERMINAL_WRITE_CHANNEL,
@@ -393,21 +308,9 @@ export function bindTabs(
         handleTerminalClose,
       );
       ipc.removeHandler(TABS_FILES_LIST_CHANNEL);
-      ipc.removeHandler(TABS_FILES_DIFF_CHANNEL);
       ipc.removeHandler(TABS_FILES_OPEN_CHANNEL);
       ipc.removeHandler(TABS_FILES_PREVIEW_CHANNEL);
       ipc.removeHandler(TABS_FILES_WRITE_CHANNEL);
-      ipc.removeHandler(TABS_FILES_VIEW_STATE_READ_CHANNEL);
-      ipc.removeHandler(TABS_FILES_VIEW_STATE_WRITE_CHANNEL);
-      ipc.removeListener(
-        TABS_FILES_WATCH_CHANNEL,
-        handleFilesWatch,
-      );
-      ipc.removeListener(
-        TABS_FILES_UNWATCH_CHANNEL,
-        handleFilesUnwatch,
-      );
-      fileWatch.dispose();
       void terminal.dispose();
     },
   };

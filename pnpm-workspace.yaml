@@ -20,6 +20,7 @@ allowBuilds:
   esbuild: true
   fs-xattr: true
   macos-alias: true
+  node-pty: true
 
 minimumReleaseAgeExclude:
   - '@codemirror/view@6.43.9'

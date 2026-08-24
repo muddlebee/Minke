@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { delimiter, join } from "node:path";
 import test from "node:test";
 import {
   TerminalSessionRuntime,
@@ -207,7 +206,6 @@ test("Host terminal runtime streams output and tears down an abandoned poll", as
 });
 
 test("desktop terminal runtime owns PTY data, resize, and teardown", async () => {
-  const runtimeRoot = "/runtime";
   const writes = [];
   const resizes = [];
   const events = [];
@@ -243,8 +241,6 @@ test("desktop terminal runtime owns PTY data, resize, and teardown", async () =>
       },
     },
     shell: "/bin/zsh",
-    runtimeRoot,
-    electronExecutable: "/Applications/Minke.app/Contents/MacOS/Minke",
     defaultCwd: "/Users/test",
     environment: {
       DSH_HOME: "/data/harness",
@@ -269,19 +265,11 @@ test("desktop terminal runtime owns PTY data, resize, and teardown", async () =>
   assert.equal(spawn.options.cwd, "/workspace");
   assert.equal(spawn.options.name, "xterm-256color");
   assert.equal(spawn.options.env.DSH_HOME, "/data/harness");
-  assert.equal(
-    spawn.options.env.MINKE_NODE_EXECUTABLE,
-    "/Applications/Minke.app/Contents/MacOS/Minke",
-  );
-  assert.equal(
-    spawn.options.env.MINKE_PNPM_ENTRY,
-    join(runtimeRoot, "node_modules", "pnpm", "bin", "pnpm.cjs"),
-  );
-  assert.equal(spawn.options.env.ELECTRON_RUN_AS_NODE, "1");
-  assert.equal(
-    spawn.options.env.PATH,
-    [join(runtimeRoot, "bin"), "/usr/bin"].join(delimiter),
-  );
+  assert.equal(spawn.options.env.MINKE_NODE_EXECUTABLE, undefined);
+  assert.equal(spawn.options.env.MINKE_PNPM_ENTRY, undefined);
+  assert.equal(spawn.options.env.ELECTRON_RUN_AS_NODE, undefined);
+  assert.equal(spawn.options.env.PATH, "/usr/bin");
+  assert.equal(spawn.options.env.TERM_PROGRAM, "Oru");
 
   runtime.write({
     sessionId: "terminal-1",

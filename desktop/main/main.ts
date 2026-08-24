@@ -11,18 +11,10 @@ import {
   // Tray,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
-  type OpenDialogOptions,
-  type SaveDialogOptions,
   type WebContents,
 } from "electron";
 import started from "electron-squirrel-startup";
-import { join, parse } from "node:path";
-import {
-  DEFAULT_REMOTE_SETTINGS,
-  discoverRemoteCommands,
-  RemoteAccessService,
-  type RemoteSettings,
-} from "@lencx/minke-remote-access";
+import { join } from "node:path";
 import {
   DesktopLocaleRuntime,
   translateDesktop,
@@ -34,51 +26,19 @@ import {
   type DesktopLocale,
 } from "@minke/desktop/locale-contract";
 import {
-  TABS_WEB_PARTITION,
-} from "@minke/harness-overlay/tabs/contract";
+  WORKSPACE_OPEN_CHANNEL,
+  type DesktopWorkspace,
+} from "@minke/desktop/standalone-contract";
+import { TABS_WEB_PARTITION } from "@minke/harness-overlay/tabs/contract";
 import {
   SHORTCUT_INVOKE_CHANNEL,
   type ProductShortcutActionId,
   type ShortcutBindings,
 } from "@minke/harness-overlay/shortcut-contract";
 import { configureAppDataPaths } from "./app-data-paths";
-import {
-  HarnessRuntime,
-  type HarnessRuntimeExit,
-} from "./harness-runtime";
-import { HarnessLifecycle } from "./harness-lifecycle";
-import {
-  installHarnessPermissionPolicy,
-} from "./harness-permission-policy";
 import { createStatefulMainWindow } from "./main-window-state";
-import {
-  minkeConfigFilePath,
-  MinkeConfigStore,
-} from "./minke-config";
-import {
-  discoverLocalModelCommands,
-} from "./local-model-command";
-import {
-  bindModelRuntimeSettingsIpc,
-  type ModelRuntimeSettingsBinding,
-} from "./model-runtime-settings";
-import {
-  bindRemoteSettingsIpc,
-  type RemoteSettingsBinding,
-} from "./remote-settings";
-import {
-  clearLegacyPluginCatalogCache,
-} from "./plugin-cache";
-import {
-  bindPluginInstallIpc,
-  type PluginInstallBinding,
-} from "./plugin-install";
-import {
-  PluginInstallationRuntime,
-} from "./plugin-installation";
-import {
-  macOSWindowOptions,
-} from "./macos-window";
+import { oruConfigFilePath, OruConfigStore } from "./oru-config";
+import { macOSWindowOptions } from "./macos-window";
 import { bindMacOSWindowButtonSpacing } from "./macos-window-controls";
 import { bindMainWindowDevToolsShortcut } from "./main-window-devtools";
 import { isInternalNavigation } from "./navigation-policy";
@@ -94,51 +54,24 @@ import {
   bindTerminalSettingsIpc,
   type TerminalSettingsBinding,
 } from "./terminal-settings";
-import {
-  buildDshChildEnvironment,
-  DataHomeManager,
-} from "./data-home";
-import { requestDesktopRestart } from "./app-restart";
-import {
-  bindDataHomeSettingsIpc,
-  type DataHomeSettingsBinding,
-} from "./data-home-settings";
-import {
-  bindSessionLogExport,
-  type SessionLogExportBinding,
-} from "./session-export";
-import {
-  bindTabs,
-  canGrantTabWebPermission,
-  type TabsBinding,
-} from "./tabs";
+import { bindTabs, type TabsBinding } from "./tabs";
 import { bindWindowLocale } from "./window-locale";
 import { bindWindowTheme } from "./window-theme";
+import {
+  WorkspaceAccessRegistry,
+  type AuthorizedWorkspacePath,
+} from "./workspace-access";
 
-const PRODUCT_NAME = "Minke";
-const BACKGROUND_COLOR = "#0b1220";
+const PRODUCT_NAME = "Oru";
+const BACKGROUND_COLOR = "#111412";
 
 let mainWindow: BrowserWindow | undefined;
-let runtime: HarnessRuntime | undefined;
-let harnessLifecycle: HarnessLifecycle | undefined;
-let quitting = false;
-let shutdownStarted = false;
-let recovering = false;
 let shortcutMenuBinding: ShortcutMenuBinding | undefined;
 let shortcutSettingsBinding: ShortcutSettingsBinding | undefined;
 let terminalSettingsBinding: TerminalSettingsBinding | undefined;
-let modelRuntimeSettingsBinding:
-  | ModelRuntimeSettingsBinding
-  | undefined;
-let remoteSettingsBinding: RemoteSettingsBinding | undefined;
-let remoteAccess: RemoteAccessService | undefined;
-let pluginInstallBinding: PluginInstallBinding | undefined;
-let dataHomeSettingsBinding: DataHomeSettingsBinding | undefined;
-let sessionLogExportBinding: SessionLogExportBinding | undefined;
 let tabsBinding: TabsBinding | undefined;
 let desktopLocale: DesktopLocaleRuntime | undefined;
-let activeDshEnvironment: NodeJS.ProcessEnv | undefined;
-let requestedExitCode: number | undefined;
+const workspaceAccess = new WorkspaceAccessRegistry();
 // let appTray: Tray | undefined;
 
 function activeDesktopLocale(): DesktopLocale {
@@ -149,72 +82,13 @@ function desktopText(
   key: DesktopMessageKey,
   params?: DesktopTranslateParams,
 ): string {
-  return desktopLocale?.t(key, params) ??
-    translateDesktop("en", key, params);
-}
-
-function scheduleDesktopRestart(): void {
-  setTimeout(() => {
-    requestDesktopRestart(app, (exitCode) => {
-      requestedExitCode = exitCode;
-    });
-  }, 100);
-}
-
-function sessionExportSaveDialogOptions(
-  suggestedFilename: string,
-): SaveDialogOptions {
-  return {
-    title: desktopText("sessionExport.saveDialogTitle"),
-    defaultPath: join(
-      app.getPath("downloads"),
-      suggestedFilename,
-    ),
-    filters: [
-      {
-        name: desktopText("sessionExport.zipFilter"),
-        extensions: ["zip"],
-      },
-    ],
-    properties: [
-      "createDirectory",
-      "showOverwriteConfirmation",
-    ],
-  };
-}
-
-function dataHomeOpenDialogOptions(
-  defaultPath: string,
-): OpenDialogOptions {
-  return {
-    title: desktopText("dataHome.chooseDirectoryTitle"),
-    defaultPath,
-    buttonLabel: desktopText("dataHome.chooseDirectoryButton"),
-    properties: ["openDirectory", "createDirectory"],
-  };
-}
-
-function dshEnvironment(): NodeJS.ProcessEnv {
-  if (activeDshEnvironment === undefined) {
-    throw new Error("DSH environment was not initialized");
-  }
-  return activeDshEnvironment;
-}
-
-function runtimeRoot(): string {
-  return app.isPackaged
-    ? join(process.resourcesPath, "host")
-    : join(app.getAppPath(), "runtime", "host");
+  return desktopLocale?.t(key, params) ?? translateDesktop("en", key, params);
 }
 
 function bootstrapUrl(): string | undefined {
-  return MAIN_WINDOW_VITE_DEV_SERVER_URL || undefined;
-}
-
-function macOSSurfaceBootstrapRoot(): string {
-  return app.isPackaged
-    ? join(process.resourcesPath, "desktop-style-extension")
-    : join(app.getAppPath(), "resources", "desktop-style-extension");
+  return typeof MAIN_WINDOW_VITE_DEV_SERVER_URL === "string"
+    ? MAIN_WINDOW_VITE_DEV_SERVER_URL || undefined
+    : undefined;
 }
 
 function appIconPath(): string {
@@ -239,19 +113,17 @@ function showMainWindow(): void {
   mainWindow.focus();
 }
 
-async function invokeShortcutAction(
-  id: ProductShortcutActionId,
-): Promise<void> {
+function isMainFrame(
+  window: BrowserWindow,
+  event: IpcMainEvent | IpcMainInvokeEvent,
+): boolean {
+  return event.sender === window.webContents &&
+    event.senderFrame === window.webContents.mainFrame;
+}
+
+async function invokeShortcutAction(id: ProductShortcutActionId): Promise<void> {
   const window = mainWindow ?? await createWindow();
-  const harnessUrl = activeHarnessUrl();
   if (window.isDestroyed() || window.webContents.isDestroyed()) return;
-  if (
-    harnessUrl !== undefined &&
-    !isHarnessUrl(window.webContents.getURL())
-  ) {
-    await window.loadURL(harnessUrl);
-  }
-  if (!isHarnessUrl(window.webContents.getURL())) return;
   if (window.isMinimized()) window.restore();
   window.show();
   window.focus();
@@ -270,14 +142,7 @@ async function invokeShortcutAction(
 //   appTray.on("click", showMainWindow);
 // }
 
-async function installMacOSSurfaceBootstrap(): Promise<void> {
-  if (process.platform !== "darwin") return;
-  await session.defaultSession.extensions.loadExtension(
-    macOSSurfaceBootstrapRoot(),
-  );
-}
-
-async function loadBootstrap(window: BrowserWindow): Promise<void> {
+async function loadRenderer(window: BrowserWindow): Promise<void> {
   const developmentUrl = bootstrapUrl();
   if (developmentUrl !== undefined) {
     const url = new URL(developmentUrl);
@@ -286,36 +151,15 @@ async function loadBootstrap(window: BrowserWindow): Promise<void> {
     return;
   }
   await window.loadFile(
-    join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
-    {
-      query: { locale: activeDesktopLocale() },
-    },
-  );
-}
-
-function activeHarnessUrl(): string | undefined {
-  return harnessLifecycle?.url;
-}
-
-function isHarnessUrl(value: string): boolean {
-  const harnessUrl = activeHarnessUrl();
-  if (harnessUrl === undefined) return false;
-  try {
-    return new URL(value).origin === new URL(harnessUrl).origin;
-  } catch {
-    return false;
-  }
-}
-
-function isAuthorizedHarnessRenderer(
-  candidate: Pick<IpcMainEvent, "sender" | "senderFrame">,
-  window: BrowserWindow | undefined = mainWindow,
-): boolean {
-  return (
-    window !== undefined &&
-    candidate.sender === window.webContents &&
-    candidate.senderFrame !== null &&
-    isHarnessUrl(candidate.senderFrame.url)
+    join(
+      __dirname,
+      "../renderer",
+      typeof MAIN_WINDOW_VITE_NAME === "string"
+        ? MAIN_WINDOW_VITE_NAME
+        : "main_window",
+      "index.html",
+    ),
+    { query: { locale: activeDesktopLocale() } },
   );
 }
 
@@ -329,45 +173,43 @@ function canOpenExternally(value: string): boolean {
 
 function protectNavigation(webContents: WebContents): void {
   webContents.on("will-navigate", (details) => {
-    if (
-      isInternalNavigation(
-        details.url,
-        [bootstrapUrl(), activeHarnessUrl()],
-      )
-    ) {
-      return;
-    }
+    if (isInternalNavigation(details.url, [bootstrapUrl()])) return;
     details.preventDefault();
-    if (canOpenExternally(details.url)) {
-      void shell.openExternal(details.url);
-    }
+    if (canOpenExternally(details.url)) void shell.openExternal(details.url);
   });
-
   webContents.setWindowOpenHandler(({ url }) => {
-    if (isHarnessUrl(url)) {
-      return {
-        action: "allow",
-        overrideBrowserWindowOptions: {
-          backgroundColor: BACKGROUND_COLOR,
-          webPreferences: {
-            contextIsolation: true,
-            nodeIntegration: false,
-            sandbox: true,
-            webSecurity: true,
-          },
-        },
-      };
-    }
-    if (canOpenExternally(url)) {
-      void shell.openExternal(url);
-    }
+    if (canOpenExternally(url)) void shell.openExternal(url);
     return { action: "deny" };
   });
 }
 
+async function authorizeWorkspacePath(
+  candidate: string,
+  root?: string,
+): Promise<AuthorizedWorkspacePath> {
+  return await workspaceAccess.authorizeWithRoot(candidate, root);
+}
+
+function bindWorkspacePicker(window: BrowserWindow): () => void {
+  const handleOpen = async (
+    event: IpcMainInvokeEvent,
+  ): Promise<DesktopWorkspace | undefined> => {
+    if (!isMainFrame(window, event)) throw new Error("unauthorized workspace request");
+    const result = await dialog.showOpenDialog(window, {
+      title: desktopText("workspace.openDialogTitle"),
+      properties: ["openDirectory", "createDirectory"],
+    });
+    const selected = result.filePaths[0];
+    if (result.canceled || selected === undefined) return undefined;
+    return await workspaceAccess.approve(selected);
+  };
+  ipcMain.handle(WORKSPACE_OPEN_CHANNEL, handleOpen);
+  return () => ipcMain.removeHandler(WORKSPACE_OPEN_CHANNEL);
+}
+
 async function createWindow(): Promise<BrowserWindow> {
   const window = createStatefulMainWindow(
-    minkeConfigFilePath(app.getPath("userData")),
+    oruConfigFilePath(app.getPath("userData")),
     (bounds) => new BrowserWindow({
       title: PRODUCT_NAME,
       icon: appIconPath(),
@@ -394,18 +236,13 @@ async function createWindow(): Promise<BrowserWindow> {
   bindMainWindowDevToolsShortcut(Menu);
   const windowTheme = bindWindowTheme(window, nativeTheme);
   const localeRuntime = desktopLocale;
-  if (localeRuntime === undefined) {
-    throw new Error("desktop locale was not initialized");
-  }
+  if (localeRuntime === undefined) throw new Error("desktop locale was not initialized");
   const windowLocale = bindWindowLocale(
     window,
     localeRuntime,
-    (candidate) =>
-      isAuthorizedHarnessRenderer(
-        candidate as IpcMainEvent,
-        window,
-      ),
+    (candidate) => isMainFrame(window, candidate as IpcMainEvent),
   );
+  const unbindWorkspacePicker = bindWorkspacePicker(window);
   mainWindow = window;
   shortcutMenuBinding?.refreshBaseMenu();
   protectNavigation(window.webContents);
@@ -413,156 +250,39 @@ async function createWindow(): Promise<BrowserWindow> {
     ipcMain,
     window.webContents,
     shell,
-    (candidate) =>
-      isAuthorizedHarnessRenderer(candidate, window),
+    (candidate) => isMainFrame(window, candidate),
     {
-      runtimeRoot: runtimeRoot(),
-      electronExecutable: process.execPath,
+      runtimeRoot: app.getAppPath(),
       defaultCwd: app.getPath("home"),
-      fileSystemRoot: parse(app.getPath("home")).root,
-      minkeConfigPath: minkeConfigFilePath(
-        app.getPath("userData"),
-      ),
-      environment: dshEnvironment(),
-    },
-  );
-  sessionLogExportBinding = bindSessionLogExport(
-    ipcMain,
-    window.webContents.session,
-    window.webContents,
-    shell,
-    {
-      authorize: (candidate) =>
-        isAuthorizedHarnessRenderer(candidate, window),
-      harnessUrl: activeHarnessUrl,
-      async chooseDestination(suggestedFilename) {
-        const result = await dialog.showSaveDialog(
-          window,
-          sessionExportSaveDialogOptions(suggestedFilename),
-        );
-        return result.canceled || result.filePath === ""
-          ? undefined
-          : result.filePath;
-      },
-      saveDialogOptions: sessionExportSaveDialogOptions,
-      reportError(error) {
-        void dialog
-          .showMessageBox(window, {
-            type: "error",
-            title: desktopText("sessionExport.failedTitle"),
-            message: desktopText("sessionExport.failedMessage"),
-            detail: error.message,
-            buttons: [desktopText("sessionExport.ok")],
-            defaultId: 0,
-            noLink: true,
-          })
-          .catch((dialogError: unknown) => {
-            console.error(
-              "Unable to show Session export error:",
-              dialogError,
-            );
-          });
-      },
+      fileSystemRoot: app.getPath("home"),
+      authorizePath: authorizeWorkspacePath,
     },
   );
   window.once("ready-to-show", () => window.show());
   window.once("closed", () => {
     windowButtonSpacing?.dispose();
-    sessionLogExportBinding?.dispose();
-    sessionLogExportBinding = undefined;
     tabsBinding?.dispose();
     tabsBinding = undefined;
+    unbindWorkspacePicker();
     windowLocale.dispose();
     windowTheme.dispose();
+    workspaceAccess.clear();
     if (mainWindow === window) mainWindow = undefined;
   });
-
-  await loadBootstrap(window);
-  await harnessLifecycle?.attach(window);
+  await loadRenderer(window);
   return window;
 }
 
 function installPermissionPolicy(): void {
-  installHarnessPermissionPolicy(session.defaultSession, {
-    harnessUrl: activeHarnessUrl,
-    activeWebContents: () => mainWindow?.webContents,
-  });
-
-  const tabsWebSession = session.fromPartition(
-    TABS_WEB_PARTITION,
+  session.defaultSession.setPermissionCheckHandler(() => false);
+  session.defaultSession.setPermissionRequestHandler(
+    (_webContents, _permission, callback) => callback(false),
   );
-  tabsWebSession.setPermissionCheckHandler(
-    (_webContents, permission, requestingOrigin, details) =>
-      canGrantTabWebPermission(
-        permission,
-        details.requestingUrl ?? requestingOrigin,
-      ),
-  );
+  const tabsWebSession = session.fromPartition(TABS_WEB_PARTITION);
+  tabsWebSession.setPermissionCheckHandler(() => false);
   tabsWebSession.setPermissionRequestHandler(
-    (_webContents, permission, callback, details) =>
-      callback(
-        canGrantTabWebPermission(
-          permission,
-          details.requestingUrl,
-        ),
-      ),
+    (_webContents, _permission, callback) => callback(false),
   );
-}
-
-async function startHarness(): Promise<void> {
-  await harnessLifecycle?.start(mainWindow);
-}
-
-async function handleUnexpectedExit(exit: HarnessRuntimeExit): Promise<void> {
-  if (quitting || recovering) return;
-  recovering = true;
-  harnessLifecycle?.clear();
-  console.error("Harness runtime exited unexpectedly:", exit);
-
-  try {
-    try {
-      await remoteAccess?.stop();
-    } catch (error) {
-      console.error("Remote access failed to stop:", error);
-    }
-    if (mainWindow !== undefined) await loadBootstrap(mainWindow);
-    const detail = [
-      desktopText("runtime.exitCode", {
-        value: String(exit.code),
-      }),
-      desktopText("runtime.signal", {
-        value: String(exit.signal),
-      }),
-      "",
-      exit.output.slice(-4_000),
-    ].join("\n");
-    const result = await dialog.showMessageBox({
-      type: "error",
-      title: desktopText("runtime.stoppedTitle"),
-      message: desktopText("runtime.stoppedMessage"),
-      detail,
-      buttons: [
-        desktopText("runtime.restart"),
-        desktopText("runtime.quit"),
-      ],
-      defaultId: 0,
-      cancelId: 1,
-      noLink: true,
-    });
-    if (result.response === 0) {
-      await startHarness();
-    } else {
-      app.quit();
-    }
-  } catch (error) {
-    dialog.showErrorBox(
-      desktopText("runtime.restartFailedTitle"),
-      error instanceof Error ? error.stack ?? error.message : String(error),
-    );
-    app.quit();
-  } finally {
-    recovering = false;
-  }
 }
 
 async function bootstrap(): Promise<void> {
@@ -572,239 +292,44 @@ async function bootstrap(): Promise<void> {
     app.quit();
     return;
   }
-
-  app.on("second-instance", () => {
-    showMainWindow();
-  });
-
+  app.on("second-instance", showMainWindow);
   await app.whenReady();
-  desktopLocale = new DesktopLocaleRuntime(
-    resolveDesktopLocale(app.getLocale()),
-  );
-  await installMacOSSurfaceBootstrap();
+  desktopLocale = new DesktopLocaleRuntime(resolveDesktopLocale(
+    app.commandLine.getSwitchValue("lang") || app.getLocale(),
+  ));
   installPermissionPolicy();
-  const minkeConfig = new MinkeConfigStore(app.getPath("userData"));
-  const shortcutStore = minkeConfig.shortcuts;
-  const terminalSettingsStore = minkeConfig.terminal;
-  const modelRuntimeSettingsStore = minkeConfig.modelRuntime;
-  const remoteSettingsStore = minkeConfig.remote;
-  const dataHomeManager = new DataHomeManager({
-    userDataPath: app.getPath("userData"),
-    homeDirectory: app.getPath("home"),
-    environment: process.env,
-    configuration: minkeConfig.dshHome,
-    async chooseDirectory(defaultPath) {
-      const options = dataHomeOpenDialogOptions(defaultPath);
-      const result = mainWindow === undefined
-        ? await dialog.showOpenDialog(options)
-        : await dialog.showOpenDialog(mainWindow, options);
-      return result.canceled
-        ? undefined
-        : result.filePaths[0];
-    },
-    restart: scheduleDesktopRestart,
-  });
-  const migrationState =
-    await dataHomeManager.completePendingMigration();
-  if (migrationState?.error !== undefined) {
-    console.error(
-      migrationState.status === "failed"
-        ? "DSH data-directory migration failed:"
-        : "DSH data-directory activation remains pending:",
-      migrationState.error,
-    );
-  }
-  const activeDshHome = await dataHomeManager.activePath();
-  activeDshEnvironment = buildDshChildEnvironment(
-    activeDshHome,
-    process.env,
-  );
-  try {
-    await clearLegacyPluginCatalogCache(app.getPath("userData"));
-  } catch (error) {
-    console.error("Unable to clear the retired plugin catalog cache:", error);
-  }
-  await createWindow();
-  const pluginInstallation = new PluginInstallationRuntime({
-    runtimeRoot: runtimeRoot(),
-    dshHome: activeDshHome,
-    electronExecutable: process.execPath,
-    environment: activeDshEnvironment,
-  });
-  const localModelCommands = await discoverLocalModelCommands({
-    homeDirectory: app.getPath("home"),
-    pathValue: process.env.PATH,
-    platform: process.platform,
-    ...(process.env.LOCALAPPDATA === undefined
-      ? {}
-      : { localAppData: process.env.LOCALAPPDATA }),
-  });
-  const remoteCommands = await discoverRemoteCommands({
-    homeDirectory: app.getPath("home"),
-    pathValue: process.env.PATH,
-    platform: process.platform,
-    ...(process.env.LOCALAPPDATA === undefined
-      ? {}
-      : { localAppData: process.env.LOCALAPPDATA }),
-    ...(process.env.ProgramFiles === undefined
-      ? {}
-      : { programFiles: process.env.ProgramFiles }),
-  });
-  const modelRuntimeAvailability = {
-    lmStudio: localModelCommands.lmStudio !== undefined,
-    ollama: localModelCommands.ollama !== undefined,
-  };
+  const oruConfig = new OruConfigStore(app.getPath("userData"));
   let shortcutBindings: ShortcutBindings = {};
-  let modelRuntimeSettings = {
-    lmStudio: { enabled: false },
-    ollama: { enabled: false },
-  };
-  let remoteSettings: RemoteSettings = {
-    enabled: DEFAULT_REMOTE_SETTINGS.enabled,
-    method: DEFAULT_REMOTE_SETTINGS.method,
-    tailscale: { ...DEFAULT_REMOTE_SETTINGS.tailscale },
-    cloudflare: { ...DEFAULT_REMOTE_SETTINGS.cloudflare },
-  };
   try {
-    shortcutBindings = await shortcutStore.read();
+    shortcutBindings = await oruConfig.shortcuts.read();
   } catch (error) {
     console.error("Unable to read native shortcut menu settings:", error);
   }
-  try {
-    modelRuntimeSettings = await modelRuntimeSettingsStore.read();
-  } catch (error) {
-    console.error("Unable to read model runtime settings:", error);
-  }
-  try {
-    remoteSettings = await remoteSettingsStore.read();
-  } catch (error) {
-    console.error("Unable to read remote access settings:", error);
-  }
-  remoteAccess = new RemoteAccessService({
-    settings: remoteSettings,
-    commands: remoteCommands,
-  });
-  let remoteTrustedHosts: readonly string[] = [];
-  try {
-    remoteTrustedHosts = (
-      await remoteAccess.prepare()
-    ).trustedHosts;
-  } catch (error) {
-    console.error("Remote access preparation failed:", error);
-  }
+  await createWindow();
   // installMacOSTray();
   shortcutMenuBinding = bindShortcutMenu(
     Menu,
     desktopLocale,
     shortcutBindings,
-    (id) => {
-      void invokeShortcutAction(id);
-    },
+    (id) => void invokeShortcutAction(id),
   );
   shortcutSettingsBinding = bindShortcutSettingsIpc(
     ipcMain,
-    shortcutStore,
-    (candidate) =>
-      isAuthorizedHarnessRenderer(
-        candidate as IpcMainInvokeEvent,
-      ),
+    oruConfig.shortcuts,
+    (candidate) => mainWindow !== undefined &&
+      isMainFrame(mainWindow, candidate as IpcMainInvokeEvent),
     (bindings) => shortcutMenuBinding?.updateBindings(bindings),
   );
   terminalSettingsBinding = bindTerminalSettingsIpc(
     ipcMain,
-    terminalSettingsStore,
-    (candidate) =>
-      isAuthorizedHarnessRenderer(
-        candidate as IpcMainInvokeEvent,
-      ),
+    oruConfig.terminal,
+    (candidate) => mainWindow !== undefined &&
+      isMainFrame(mainWindow, candidate as IpcMainInvokeEvent),
   );
-  modelRuntimeSettingsBinding = bindModelRuntimeSettingsIpc(
-    ipcMain,
-    modelRuntimeSettingsStore,
-    modelRuntimeAvailability,
-    (candidate) =>
-      isAuthorizedHarnessRenderer(
-        candidate as IpcMainInvokeEvent,
-      ),
-  );
-  remoteSettingsBinding = bindRemoteSettingsIpc(
-    ipcMain,
-    remoteSettingsStore,
-    {
-      tailscale: remoteCommands.tailscale !== undefined,
-      cloudflare: remoteCommands.cloudflared !== undefined,
-    },
-    () =>
-      remoteAccess?.read() ?? {
-        method: remoteSettings.method,
-        transport:
-          remoteSettings.method === "cloudflare"
-            ? "access"
-            : remoteSettings.tailscale.transport,
-        state: "unavailable",
-    },
-    scheduleDesktopRestart,
-    (candidate) =>
-      isAuthorizedHarnessRenderer(
-        candidate as IpcMainInvokeEvent,
-      ),
-  );
-  pluginInstallBinding = bindPluginInstallIpc(
-    ipcMain,
-    pluginInstallation,
-    (candidate) =>
-      isAuthorizedHarnessRenderer(
-        candidate as IpcMainInvokeEvent,
-      ),
-    scheduleDesktopRestart,
-  );
-  dataHomeSettingsBinding = bindDataHomeSettingsIpc(
-    ipcMain,
-    dataHomeManager,
-    (candidate) =>
-      isAuthorizedHarnessRenderer(
-        candidate as IpcMainInvokeEvent,
-      ),
-  );
-
-  runtime = new HarnessRuntime({
-    runtimeRoot: runtimeRoot(),
-    dshHome: activeDshHome,
-    electronExecutable: process.execPath,
-    modelRuntimes: {
-      lmStudio: {
-        enabled:
-          modelRuntimeSettings.lmStudio.enabled &&
-          modelRuntimeAvailability.lmStudio,
-        ...(localModelCommands.lmStudio === undefined
-          ? {}
-          : { command: localModelCommands.lmStudio }),
-      },
-      ollama: {
-        enabled:
-          modelRuntimeSettings.ollama.enabled &&
-          modelRuntimeAvailability.ollama,
-        ...(localModelCommands.ollama === undefined
-          ? {}
-          : { command: localModelCommands.ollama }),
-      },
-    },
-    trustedHosts: remoteTrustedHosts,
-    onUnexpectedExit: (exit) => void handleUnexpectedExit(exit),
-  });
-  harnessLifecycle = new HarnessLifecycle({
-    runtime,
-    remote: remoteAccess,
-  });
-  await startHarness();
-
-  app.on("activate", () => {
-    showMainWindow();
-  });
+  app.on("activate", showMainWindow);
 }
 
-app.on("before-quit", (event) => {
-  quitting = true;
+app.on("before-quit", () => {
   // appTray?.destroy();
   // appTray = undefined;
   shortcutMenuBinding?.dispose();
@@ -813,39 +338,6 @@ app.on("before-quit", (event) => {
   shortcutSettingsBinding = undefined;
   terminalSettingsBinding?.dispose();
   terminalSettingsBinding = undefined;
-  modelRuntimeSettingsBinding?.dispose();
-  modelRuntimeSettingsBinding = undefined;
-  remoteSettingsBinding?.dispose();
-  remoteSettingsBinding = undefined;
-  pluginInstallBinding?.dispose();
-  pluginInstallBinding = undefined;
-  dataHomeSettingsBinding?.dispose();
-  dataHomeSettingsBinding = undefined;
-  if (shutdownStarted) return;
-  if (runtime === undefined && remoteAccess === undefined) {
-    if (requestedExitCode !== undefined) {
-      event.preventDefault();
-      app.exit(requestedExitCode);
-    }
-    return;
-  }
-  event.preventDefault();
-  shutdownStarted = true;
-  const activeRuntime = runtime;
-  const activeRemote = remoteAccess;
-  void (async () => {
-    try {
-      await activeRemote?.stop();
-    } finally {
-      await activeRuntime?.stop();
-    }
-  })().finally(() => {
-    if (requestedExitCode === undefined) {
-      app.quit();
-    } else {
-      app.exit(requestedExitCode);
-    }
-  });
 });
 
 app.on("window-all-closed", () => {
@@ -856,7 +348,7 @@ if (started) {
   app.quit();
 } else {
   void bootstrap().catch((error) => {
-    console.error("Minke startup failed:", error);
+    console.error("Oru startup failed:", error);
     dialog.showErrorBox(
       desktopText("runtime.startupFailedTitle"),
       error instanceof Error ? error.stack ?? error.message : String(error),

@@ -1,22 +1,22 @@
 /** Shared desktop/renderer contract for the host-backed Files tab. */
-export const TABS_FILES_LIST_CHANNEL = "minke:tabs:files:list";
-export const TABS_FILES_OPEN_CHANNEL = "minke:tabs:files:open";
+export const TABS_FILES_LIST_CHANNEL = "oru:tabs:files:list";
+export const TABS_FILES_OPEN_CHANNEL = "oru:tabs:files:open";
 export const TABS_FILES_PREVIEW_CHANNEL =
-  "minke:tabs:files:preview";
+  "oru:tabs:files:preview";
 export const TABS_FILES_WRITE_CHANNEL =
-  "minke:tabs:files:write";
+  "oru:tabs:files:write";
 export const TABS_FILES_DIFF_CHANNEL =
-  "minke:tabs:files:diff";
+  "oru:tabs:files:diff";
 export const TABS_FILES_WATCH_CHANNEL =
-  "minke:tabs:files:watch";
+  "oru:tabs:files:watch";
 export const TABS_FILES_UNWATCH_CHANNEL =
-  "minke:tabs:files:unwatch";
+  "oru:tabs:files:unwatch";
 export const TABS_FILES_CHANGE_CHANNEL =
-  "minke:tabs:files:change";
+  "oru:tabs:files:change";
 export const TABS_FILES_VIEW_STATE_READ_CHANNEL =
-  "minke:tabs:files:view-state:read";
+  "oru:tabs:files:view-state:read";
 export const TABS_FILES_VIEW_STATE_WRITE_CHANNEL =
-  "minke:tabs:files:view-state:write";
+  "oru:tabs:files:view-state:write";
 
 export const FILES_MAX_ENTRIES = 2_000;
 export const FILES_MAX_WATCH_PATHS = 128;
@@ -36,19 +36,23 @@ export type FileManagerEntryKind =
 
 export interface FileManagerListRequest {
   readonly path?: string;
+  readonly root?: string;
   readonly includeRepository?: boolean;
 }
 
 export interface FileManagerOpenRequest {
   readonly path: string;
+  readonly root?: string;
 }
 
 export interface FileManagerPreviewRequest {
   readonly path: string;
+  readonly root?: string;
 }
 
 export interface FileManagerWriteRequest {
   readonly path: string;
+  readonly root?: string;
   readonly content: string;
   readonly expectedVersion: string;
 }
@@ -574,6 +578,11 @@ export function parseFileManagerListRequest(
       : {
           path: pathText(candidate.path, "file list path"),
         }),
+    ...(candidate.root === undefined
+      ? {}
+      : {
+          root: pathText(candidate.root, "file list root"),
+        }),
     ...(candidate.includeRepository === undefined
       ? {}
       : {
@@ -586,7 +595,12 @@ export function parseFileManagerOpenRequest(
   value: unknown,
 ): FileManagerOpenRequest {
   const candidate = record(value, "file open request");
-  return { path: pathText(candidate.path, "file open path") };
+  return {
+    path: pathText(candidate.path, "file open path"),
+    ...(candidate.root === undefined
+      ? {}
+      : { root: pathText(candidate.root, "file open root") }),
+  };
 }
 
 export function parseFileManagerPreviewRequest(
@@ -595,6 +609,9 @@ export function parseFileManagerPreviewRequest(
   const candidate = record(value, "file preview request");
   return {
     path: pathText(candidate.path, "file preview path"),
+    ...(candidate.root === undefined
+      ? {}
+      : { root: pathText(candidate.root, "file preview root") }),
   };
 }
 
@@ -672,6 +689,9 @@ export function parseFileManagerWriteRequest(
   }
   return {
     path: pathText(candidate.path, "file write path"),
+    ...(candidate.root === undefined
+      ? {}
+      : { root: pathText(candidate.root, "file write root") }),
     content: candidate.content,
     expectedVersion: fileVersion(
       candidate.expectedVersion,

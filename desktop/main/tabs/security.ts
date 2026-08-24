@@ -39,7 +39,7 @@ function openWithHost(
   url: string,
 ): void {
   void external.openExternal(url).catch((error: unknown) => {
-    console.error("Minke could not open the external URL:", error);
+    console.error("Oru could not open the external URL:", error);
   });
 }
 

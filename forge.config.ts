@@ -7,18 +7,39 @@ import { MakerZIP } from "@electron-forge/maker-zip";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { VitePlugin } from "@electron-forge/plugin-vite";
 import type { ForgeConfig } from "@electron-forge/shared-types";
-import { cp, mkdir, readFile } from "node:fs/promises";
+import { chmod, cp, mkdir, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { pruneMacElectronLocales } from "./scripts/forge/electron-locales.ts";
-import {
-  parsePackageArtifactPolicy,
-  verifyPackagedApplication,
-} from "./scripts/forge/package-artifact.ts";
+import { verifyStandalonePackage } from "./scripts/forge/standalone-artifact.ts";
 
 const projectRoot = __dirname;
 const iconRoot = join(projectRoot, "resources", "icons");
 const appIcon = join(iconRoot, "icon.png");
 const sysPackageRoot = join(projectRoot, "packages", "sys");
+const nodePtyPackageRoot = join(projectRoot, "node_modules", "node-pty");
+const nodeAddonApiPackageRoot = join(projectRoot, "node_modules", "node-addon-api");
+const nativeUnpack = process.platform === "win32"
+  ? "**/node_modules/node-pty/**/*.{dll,node}"
+  : "**/node_modules/{node-pty,sys}/**/{*.node,spawn-helper}";
+
+async function pruneForeignNodePtyPrebuilds(
+  buildPath: string,
+  platform: string,
+  arch: string,
+): Promise<void> {
+  const prebuilds = join(buildPath, "node_modules", "node-pty", "prebuilds");
+  const target = `${platform}-${arch}`;
+  const entries = await readdir(prebuilds, { withFileTypes: true });
+  await Promise.all(entries
+    .filter((entry) => entry.name !== target)
+    .map((entry) => rm(join(prebuilds, entry.name), {
+      force: true,
+      recursive: true,
+    })));
+  if (platform === "darwin") {
+    await chmod(join(prebuilds, target, "spawn-helper"), 0o755);
+  }
+}
 
 function logPackageStage(
   platform: string,
@@ -42,9 +63,19 @@ const config: ForgeConfig = {
         String(arch),
         "package copy hook started",
       );
+      const nodeModulesRoot = join(buildPath, "node_modules");
+      await mkdir(nodeModulesRoot, { recursive: true });
+      await Promise.all([
+        cp(nodePtyPackageRoot, join(nodeModulesRoot, "node-pty"), {
+          dereference: true,
+          recursive: true,
+        }),
+        cp(nodeAddonApiPackageRoot, join(nodeModulesRoot, "node-addon-api"), {
+          dereference: true,
+          recursive: true,
+        }),
+      ]);
       if (platform === "darwin") {
-        const nodeModulesRoot = join(buildPath, "node_modules");
-        await mkdir(nodeModulesRoot, { recursive: true });
         await cp(sysPackageRoot, join(nodeModulesRoot, "sys"), {
           recursive: true,
         });
@@ -55,45 +86,27 @@ const config: ForgeConfig = {
         "package copy hook completed",
       );
     },
-    postPackage: async (
-      _forgeConfig,
-      { arch, outputPaths, platform },
-    ) => {
-      const [runtimeContract, artifactPolicy] = await Promise.all([
-        readFile(
-          join(projectRoot, "config", "harness-runtime.json"),
-          "utf8",
-        ).then(JSON.parse),
-        readFile(
-          join(projectRoot, "config", "package-artifact.json"),
-          "utf8",
-        ).then(JSON.parse).then(parsePackageArtifactPolicy),
-      ]);
+    postPackage: async (_forgeConfig, { arch, outputPaths, platform }) => {
       for (const outputPath of outputPaths) {
-        const report = await verifyPackagedApplication(outputPath, {
-          appSizeBudgetBytes:
-            artifactPolicy.appSizeBudgetBytes[platform],
-          arch: String(arch),
+        const report = await verifyStandalonePackage(
+          outputPath,
           platform,
-          productPackageName:
-            runtimeContract.productBundle.packageName,
-          runtimeFileBudget: runtimeContract.runtimeFileBudget,
-          runtimeSizeBudgetBytes:
-            runtimeContract.runtimeSizeBudgetBytes[platform],
-        });
+          String(arch),
+        );
         console.log(
-          `Verified packaged Host ${(report.host.bytes / 1024 / 1024).toFixed(1)} MiB/${String(report.host.files)} files and app ${(report.app.bytes / 1024 / 1024).toFixed(1)} MiB`,
+          `Verified standalone package (${(report.appBytes / 1024 / 1024).toFixed(1)} MiB): renderer and node-pty present, Harness absent`,
         );
       }
+      logPackageStage(platform, String(arch), "standalone package verified");
     },
   },
   packagerConfig: {
-    name: "Minke",
-    executableName: "Minke",
-    appBundleId: "me.lencx.minke",
+    name: "Oru",
+    executableName: "Oru",
+    appBundleId: "me.lencx.oru",
     appCategoryType: "public.app-category.developer-tools",
     asar: {
-      unpack: "**/node_modules/sys/**/*.node",
+      unpack: nativeUnpack,
     },
     // The Vite plugin copies only .vite and packageAfterCopy injects the sole
     // external native package on macOS. Packager pruning would otherwise walk
@@ -109,12 +122,20 @@ const config: ForgeConfig = {
         arch,
         callback,
       ) => {
-        logPackageStage(
+        void pruneForeignNodePtyPrebuilds(
+          _buildPath,
           platform,
           String(arch),
-          "native dependencies ready",
-        );
-        callback();
+        ).then(() => {
+          logPackageStage(
+            platform,
+            String(arch),
+            "native dependencies ready",
+          );
+          callback();
+        }, (error: unknown) => {
+          callback(error instanceof Error ? error : new Error(String(error)));
+        });
       },
     ],
     beforeAsar: [
@@ -168,7 +189,7 @@ const config: ForgeConfig = {
           callback();
           return;
         }
-        void pruneMacElectronLocales(join(buildPath, "Minke.app")).then(
+        void pruneMacElectronLocales(join(buildPath, "Oru.app")).then(
           (result) => {
             console.log(
               `Pruned ${String(result.removed.length)} unused Electron locales`,
@@ -207,9 +228,6 @@ const config: ForgeConfig = {
       },
     ],
     extraResource: [
-      join(projectRoot, "runtime", "host"),
-      join(projectRoot, "resources", "desktop-style-extension"),
-      join(projectRoot, "resources", "licenses"),
       appIcon,
       join(iconRoot, "trayTemplate.png"),
       join(iconRoot, "trayTemplate@2x.png"),
@@ -218,7 +236,7 @@ const config: ForgeConfig = {
   rebuildConfig: {},
   makers: [
     new MakerSquirrel({
-      name: "Minke",
+      name: "Oru",
       setupIcon: join(iconRoot, "icon.ico"),
     }),
     new MakerZIP({}, ["darwin"]),
@@ -228,13 +246,13 @@ const config: ForgeConfig = {
     }),
     new MakerRpm({
       options: {
-        bin: "Minke",
+        bin: "Oru",
         icon: appIcon,
       },
     }),
     new MakerDeb({
       options: {
-        bin: "Minke",
+        bin: "Oru",
         icon: appIcon,
       },
     }),
@@ -262,9 +280,7 @@ const config: ForgeConfig = {
     }),
     new FusesPlugin({
       version: FuseVersion.V1,
-      // Harness and the bundled pnpm run as isolated Node processes through
-      // Electron's own runtime, so a second standalone Node binary is unnecessary.
-      [FuseV1Options.RunAsNode]: true,
+      [FuseV1Options.RunAsNode]: false,
       [FuseV1Options.EnableCookieEncryption]: true,
       [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
       [FuseV1Options.EnableNodeCliInspectArguments]: false,

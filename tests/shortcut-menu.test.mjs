@@ -5,6 +5,10 @@ import {
   shortcutBindingToAccelerator,
 } from "@minke/desktop/main/shortcut-menu.ts";
 import { DesktopLocaleRuntime } from "@minke/desktop/i18n.ts";
+import {
+  formatShortcutBinding,
+  resolveProductShortcutBindings,
+} from "@minke/harness-overlay/shortcut-contract.ts";
 
 const CUSTOM_PREFIX = "minke.shortcut.";
 
@@ -104,6 +108,30 @@ function customItem(host, suffix) {
   return item;
 }
 
+test("conflicting product bindings are disabled consistently", () => {
+  const effective = resolveProductShortcutBindings({
+    "settings.open": "Alt+S",
+    "tabs.toggle": "Alt+S",
+  }, "darwin");
+  assert.equal(effective["settings.open"], undefined);
+  assert.equal(effective["tabs.toggle"], undefined);
+  assert.equal(effective["workspace.open"], "Mod+O");
+
+  const aliasConflict = resolveProductShortcutBindings({
+    "settings.open": "Mod+S",
+    "tabs.toggle": "Meta+S",
+  }, "darwin");
+  assert.equal(aliasConflict["settings.open"], undefined);
+  assert.equal(aliasConflict["tabs.toggle"], undefined);
+});
+
+test("shortcut labels reflect platform modifiers and disabled bindings", () => {
+  assert.equal(formatShortcutBinding("Mod+Shift+O", "darwin"), "⌘⇧O");
+  assert.equal(formatShortcutBinding("Mod+Shift+O", "linux"), "Ctrl+Shift+O");
+  assert.equal(formatShortcutBinding("Alt+Comma", "darwin"), "⌥,");
+  assert.equal(formatShortcutBinding("", "win32"), undefined);
+});
+
 test("canonical shortcuts map to Electron accelerators", () => {
   assert.equal(
     shortcutBindingToAccelerator("Mod+S", "darwin"),
@@ -141,6 +169,10 @@ test("all product shortcuts are visible native menu commands", () => {
   );
 
   assert.equal(
+    customItem(host, "workspace.open").accelerator,
+    "CommandOrControl+O",
+  );
+  assert.equal(
     customItem(host, "palette.open").accelerator,
     "CommandOrControl+K",
   );
@@ -173,6 +205,7 @@ test("all product shortcuts are visible native menu commands", () => {
     "CommandOrControl+B",
   );
 
+  customItem(host, "workspace.open").click();
   customItem(host, "palette.open").click();
   customItem(host, "settings.open").click();
   customItem(host, "session.new").click();
@@ -182,6 +215,7 @@ test("all product shortcuts are visible native menu commands", () => {
   customItem(host, "tabs.toggle").click();
   customItem(host, "tabs.bottom.toggle").click();
   assert.deepEqual(dispatched, [
+    "workspace.open",
     "palette.open",
     "settings.open",
     "session.new",
@@ -207,7 +241,9 @@ test("persisted and localized changes rebuild menu accelerators", () => {
 
   binding.updateBindings({
     "session.new": "",
+    "settings.open": "Alt+S",
     "sidebar.toggle": "Mod+Shift+S",
+    "tabs.toggle": "Alt+S",
   });
   assert.equal(
     Object.hasOwn(customItem(host, "session.new"), "accelerator"),
@@ -217,8 +253,17 @@ test("persisted and localized changes rebuild menu accelerators", () => {
     customItem(host, "sidebar.toggle").accelerator,
     "CommandOrControl+Shift+S",
   );
+  assert.equal(
+    Object.hasOwn(customItem(host, "settings.open"), "accelerator"),
+    false,
+  );
+  assert.equal(
+    Object.hasOwn(customItem(host, "tabs.toggle"), "accelerator"),
+    false,
+  );
 
   locale.setLocale("zh");
+  assert.equal(customItem(host, "workspace.open").label, "打开文件夹");
   assert.equal(customItem(host, "palette.open").label, "命令面板…");
   assert.equal(customItem(host, "settings.open").label, "设置…");
   assert.equal(customItem(host, "session.new").label, "新建会话");
@@ -242,7 +287,7 @@ test("persisted and localized changes rebuild menu accelerators", () => {
     latestItems(host).filter(
       (item) => item.id?.startsWith(CUSTOM_PREFIX),
     ).filter((item) => item.type !== "separator").length,
-    8,
+    9,
   );
 
   const rebuilds = host.templates.length;

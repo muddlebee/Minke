@@ -1,13 +1,13 @@
 /** Shared desktop/renderer contract for web content hosted by Tabs. */
 export const TABS_OPEN_EXTERNAL_CHANNEL =
-  "minke:tabs:open-external";
+  "oru:tabs:open-external";
 
 export const TABS_LAYOUT_STATE_READ_CHANNEL =
-  "minke:tabs:layout-state:read";
+  "oru:tabs:layout-state:read";
 export const TABS_LAYOUT_STATE_WRITE_CHANNEL =
-  "minke:tabs:layout-state:write";
+  "oru:tabs:layout-state:write";
 
-export const TABS_WEB_PARTITION = "persist:minke-tabs-web";
+export const TABS_WEB_PARTITION = "persist:oru-tabs-web";
 
 export type TabsLayoutPlacement = "right" | "bottom";
 
@@ -101,7 +101,7 @@ export function parseTabsLayoutStateUpdate(
 }
 
 /**
- * Accept only browser resources that can safely live in Minke's isolated
+ * Accept only browser resources that can safely live in Oru's isolated
  * guest partition. Embedded credentials are rejected so the panel never
  * turns a visually hidden user-info segment into an accidental secret sink.
  */

@@ -151,7 +151,7 @@ async function writeHostText(
   const permissions = details.mode & 0o7777;
   const temporary = join(
     dirname(target),
-    `.${basename(target)}.minke-${randomUUID()}.tmp`,
+    `.${basename(target)}.oru-${randomUUID()}.tmp`,
   );
   let handle:
     | Awaited<ReturnType<typeof openFile>>

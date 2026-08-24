@@ -1,12 +1,13 @@
-/** Shared desktop/client contract for durable Minke keyboard shortcuts. */
+/** Shared desktop/client contract for durable Oru keyboard shortcuts. */
 
 export const SHORTCUT_SETTINGS_READ_CHANNEL =
-  "minke:shortcut-settings:read";
+  "oru:shortcut-settings:read";
 export const SHORTCUT_SETTINGS_WRITE_CHANNEL =
-  "minke:shortcut-settings:write";
-export const SHORTCUT_INVOKE_CHANNEL = "minke:shortcut:invoke";
+  "oru:shortcut-settings:write";
+export const SHORTCUT_INVOKE_CHANNEL = "oru:shortcut:invoke";
 
 export const DEFAULT_SHORTCUT_BINDINGS = Object.freeze({
+  "workspace.open": "Mod+O",
   "palette.open": "Mod+K",
   "settings.open": "Mod+Comma",
   "session.new": "Mod+N",
@@ -70,8 +71,91 @@ export const SHORTCUT_BINDING_PATTERN = new RegExp(
 );
 
 export type ShortcutBindings = Record<string, string>;
+export type EffectiveProductShortcutBindings = Readonly<
+  Record<ProductShortcutActionId, string | undefined>
+>;
 
-/** Narrow untrusted native-menu messages to Minke-owned shortcut actions. */
+export function resolveProductShortcutBindings(
+  overrides: ShortcutBindings,
+  platform: string,
+): EffectiveProductShortcutBindings {
+  const parsed = parseShortcutBindings(overrides);
+  const ids = Object.keys(
+    DEFAULT_SHORTCUT_BINDINGS,
+  ) as ProductShortcutActionId[];
+  const effective = Object.fromEntries(
+    ids.map((id) => [
+      id,
+      Object.hasOwn(parsed, id)
+        ? parsed[id]
+        : DEFAULT_SHORTCUT_BINDINGS[id],
+    ]),
+  ) as Record<ProductShortcutActionId, string | undefined>;
+  const counts = new Map<string, number>();
+  for (const binding of Object.values(effective)) {
+    if (binding === undefined || binding === "") continue;
+    const label = formatShortcutBinding(binding, platform);
+    if (label !== undefined) {
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+  }
+  for (const id of ids) {
+    const binding = effective[id];
+    const label = binding === undefined || binding === ""
+      ? undefined
+      : formatShortcutBinding(binding, platform);
+    if (
+      label !== undefined &&
+      (counts.get(label) ?? 0) > 1
+    ) {
+      effective[id] = undefined;
+    }
+  }
+  return Object.freeze(effective);
+}
+
+const DISPLAY_KEYS: Readonly<Record<string, string>> = Object.freeze({
+  ArrowDown: "↓",
+  ArrowLeft: "←",
+  ArrowRight: "→",
+  ArrowUp: "↑",
+  Backquote: "`",
+  Backslash: "\\",
+  BracketLeft: "[",
+  BracketRight: "]",
+  Comma: ",",
+  Equal: "=",
+  Minus: "-",
+  Period: ".",
+  Quote: "'",
+  Semicolon: ";",
+  Slash: "/",
+});
+
+export function formatShortcutBinding(
+  binding: string,
+  platform: string,
+): string | undefined {
+  if (binding === "") return undefined;
+  if (!isShortcutBinding(binding)) {
+    throw new TypeError(`invalid shortcut binding ${JSON.stringify(binding)}`);
+  }
+  const tokens = binding.split("+");
+  const key = tokens.pop();
+  if (key === undefined) return undefined;
+  const macOS = platform === "darwin";
+  const modifiers = tokens.map((token) => {
+    if (token === "Mod") return macOS ? "⌘" : "Ctrl";
+    if (token === "Ctrl") return macOS ? "⌃" : "Ctrl";
+    if (token === "Meta") return macOS ? "⌘" : "Super";
+    if (token === "Alt") return macOS ? "⌥" : "Alt";
+    if (token === "Shift") return macOS ? "⇧" : "Shift";
+    return token;
+  });
+  return [...modifiers, DISPLAY_KEYS[key] ?? key].join(macOS ? "" : "+");
+}
+
+/** Narrow untrusted native-menu messages to Oru-owned shortcut actions. */
 export function isProductShortcutActionId(
   value: unknown,
 ): value is ProductShortcutActionId {

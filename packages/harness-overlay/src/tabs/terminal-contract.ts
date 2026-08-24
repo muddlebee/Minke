@@ -1,14 +1,14 @@
 /** Shared desktop/renderer contract for interactive Terminal tabs. */
 export const TABS_TERMINAL_CREATE_CHANNEL =
-  "minke:tabs:terminal:create";
+  "oru:tabs:terminal:create";
 export const TABS_TERMINAL_WRITE_CHANNEL =
-  "minke:tabs:terminal:write";
+  "oru:tabs:terminal:write";
 export const TABS_TERMINAL_RESIZE_CHANNEL =
-  "minke:tabs:terminal:resize";
+  "oru:tabs:terminal:resize";
 export const TABS_TERMINAL_CLOSE_CHANNEL =
-  "minke:tabs:terminal:close";
+  "oru:tabs:terminal:close";
 export const TABS_TERMINAL_EVENT_CHANNEL =
-  "minke:tabs:terminal:event";
+  "oru:tabs:terminal:event";
 
 export const TERMINAL_MIN_COLS = 2;
 export const TERMINAL_MAX_COLS = 500;

@@ -4,7 +4,7 @@ import {
   type DesktopLocale,
 } from "@minke/desktop/locale-contract.ts";
 
-/** Lifecycle handle for a window-scoped Harness locale listener. */
+/** Lifecycle handle for a window-scoped renderer locale listener. */
 export type WindowLocaleBinding = Readonly<{
   dispose(): void;
 }>;
@@ -25,7 +25,7 @@ type DesktopLocaleTarget = Readonly<{
 }>;
 
 /**
- * Project validated, authorized Harness locale messages into desktop state.
+ * Project validated, authorized renderer locale messages into desktop state.
  * The listener is window-scoped so closing a BrowserWindow releases it.
  */
 export function bindWindowLocale(

@@ -12,9 +12,9 @@ import {
   bindTerminalSettingsIpc,
 } from "@minke/desktop/main/terminal-settings.ts";
 import {
-  MINKE_CONFIG_VERSION,
-  MinkeConfigStore,
-} from "@minke/desktop/main/minke-config.ts";
+  ORU_CONFIG_VERSION,
+  OruConfigStore,
+} from "@minke/desktop/main/oru-config.ts";
 import {
   DEFAULT_TERMINAL_SETTINGS,
   parseTerminalSettings,
@@ -56,7 +56,7 @@ const roots = [];
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "minke-terminal-settings-"));
   roots.push(root);
-  const config = new MinkeConfigStore(root);
+  const config = new OruConfigStore(root);
   return {
     path: config.path,
     store: config.terminal,
@@ -70,30 +70,6 @@ afterEach(async () => {
     }),
   );
 });
-
-function assertDefaultRemoteSettings(settings) {
-  assert.match(
-    settings.cloudflare.generatedLabel,
-    /^m-[0123456789abcdefghjkmnpqrstvwxyz]{16}$/u,
-  );
-  assert.deepEqual(settings, {
-    enabled: false,
-    method: "tailscale",
-    tailscale: { transport: "serve" },
-    cloudflare: {
-      hostnameMode: "generated",
-      domain: "",
-      generatedLabel:
-        settings.cloudflare.generatedLabel,
-      customHostname: "",
-      teamName: "",
-      audience: "",
-      tunnel: "",
-      configPath: "",
-      originPort: 49_321,
-    },
-  });
-}
 
 test("Terminal settings validate a small, exact rendering contract", () => {
   assert.deepEqual(
@@ -358,7 +334,7 @@ test("Terminal viewport covers the FitAddon row remainder with the active theme"
   );
 });
 
-test("the desktop store writes Terminal settings into Minke config", async () => {
+test("the desktop store writes Terminal settings into Oru config", async () => {
   const { path, store } = await fixture();
   assert.deepEqual(await store.read(), DEFAULT_TERMINAL_SETTINGS);
 
@@ -373,22 +349,15 @@ test("the desktop store writes Terminal settings into Minke config", async () =>
     fontSize: 14,
     lineHeight: 1.35,
   });
-  const document = JSON.parse(await readFile(path, "utf8"));
-  const { remote, ...documentWithoutRemote } = document;
-  assert.deepEqual(documentWithoutRemote, {
-    version: MINKE_CONFIG_VERSION,
+  assert.deepEqual(JSON.parse(await readFile(path, "utf8")), {
+    version: ORU_CONFIG_VERSION,
     shortcuts: {},
     terminal: {
       fontFamily: "JetBrains Mono",
       fontSize: 14,
       lineHeight: 1.35,
     },
-    modelRuntime: {
-      lmStudio: { enabled: false },
-      ollama: { enabled: false },
-    },
   });
-  assertDefaultRemoteSettings(remote);
 });
 
 test("Terminal settings IPC authorizes and validates reads and writes", async () => {

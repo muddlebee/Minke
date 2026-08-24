@@ -1,26 +1,29 @@
 /** Renderer-to-main channel carrying the app's native window appearance. */
-export const WINDOW_THEME_CHANNEL = "minke:window-theme";
+export const WINDOW_THEME_CHANNEL = "oru:window-theme";
 
 /** Resolved color schemes supported by Electron's native theme bridge. */
 export type WindowColorScheme = "light" | "dark";
 
-/** Built-in preference owned by Harness's theme service. */
+/** Built-in preference owned by the renderer's theme service. */
 export type WindowThemePreference = "light" | "dark" | "system";
 
-/** Early boot projection, before the Harness theme service is available. */
+/** Early boot projection, before the renderer theme service is available. */
 export type ResolvedWindowThemeMessage = Readonly<{
   colorScheme: WindowColorScheme;
 }>;
 
-/** Authoritative Harness snapshot, including whether the OS stays in charge. */
-export type HarnessWindowThemeMessage = Readonly<{
+/** Authoritative renderer snapshot, including whether the OS stays in charge. */
+export type RendererWindowThemeMessage = Readonly<{
   preference: WindowThemePreference;
   colorScheme: WindowColorScheme;
 }>;
 
+/** @deprecated Use RendererWindowThemeMessage. */
+export type HarnessWindowThemeMessage = RendererWindowThemeMessage;
+
 export type WindowThemeMessage =
   | ResolvedWindowThemeMessage
-  | HarnessWindowThemeMessage;
+  | RendererWindowThemeMessage;
 
 /** Validate untrusted renderer data before it can change process-wide native UI. */
 export function isWindowThemeMessage(
