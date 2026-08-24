@@ -20,8 +20,8 @@ export interface TerminalSettings {
 export const DEFAULT_TERMINAL_SETTINGS: Readonly<TerminalSettings> =
   Object.freeze({
     fontFamily: "",
-    fontSize: 12,
-    lineHeight: 1.24,
+    fontSize: 13,
+    lineHeight: 1.4,
   });
 
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f]/u;
