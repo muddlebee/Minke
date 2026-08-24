@@ -48,6 +48,15 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   const secondFixtureRoot = await mkdtemp(join(tmpdir(), "oru-electron-second-"));
   const profileRoot = await mkdtemp(join(tmpdir(), "oru-electron-profile-"));
   await writeFile(join(fixtureRoot, "hello.txt"), "oru-file-preview-marker\n", "utf8");
+  await Promise.all(
+    Array.from({ length: 60 }, (_, index) =>
+      writeFile(
+        join(fixtureRoot, `workspace-entry-${String(index).padStart(2, "0")}.txt`),
+        "layout fixture\n",
+        "utf8",
+      )
+    ),
+  );
   const slowPreview = Buffer.alloc(8 * 1_024 * 1_024, "x");
   slowPreview.write("slow-preview-marker\n");
   await writeFile(join(fixtureRoot, "slow.txt"), slowPreview);
@@ -121,7 +130,7 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   });
   assert.deepEqual(nativeOpenFolder, {
     accelerator: "CommandOrControl+O",
-    label: "Open Folder",
+    label: "Open folder",
   });
   await page.evaluate(async () => {
     await window.oruDesktop.shortcuts.write({
@@ -152,6 +161,27 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   await page.getByRole("button", { name: /Open (?:a )?folder/iu }).first().click();
   await page.getByText(fixtureRoot, { exact: true }).first().waitFor();
   await page.getByText(/Ready in/u).waitFor();
+  await electronApp.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows()[0];
+    window?.setMinimumSize(800, 360);
+    window?.setSize(960, 400);
+  });
+  const composer = page.getByRole("textbox", { name: "Message" });
+  assert.equal(
+    await composer.evaluate((element) => {
+      const bounds = element.closest(".composer")?.getBoundingClientRect();
+      return bounds !== undefined &&
+        bounds.top >= 0 &&
+        bounds.bottom <= window.innerHeight;
+    }),
+    true,
+    "the composer should remain inside the visible conversation pane",
+  );
+  await electronApp.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows()[0];
+    window?.setSize(1280, 820);
+    window?.setMinimumSize(960, 640);
+  });
 
   await invokeShortcut("session.new");
   await page.locator(".session-row").nth(1).waitFor();
@@ -166,7 +196,6 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   await page.waitForFunction(() => document.querySelector(".session-row")?.getAttribute("data-active") === "true");
   assert.equal(await page.locator(".session-row").first().getAttribute("data-active"), "true");
 
-  const composer = page.getByRole("textbox", { name: "Message" });
   await composer.fill("first-session-unsent-draft");
   await page.locator(".session-row").nth(1).click();
   assert.equal(await composer.inputValue(), "");
@@ -354,7 +383,10 @@ test("standalone Electron shell supports the primary workspace workflow", { time
   await rm(join(fixtureRoot, "vanishing"), { recursive: true, force: true });
   await page.getByRole("button", { name: "missing-next" }).click();
   await page.getByText("Unable to load this folder.", { exact: true }).waitFor();
-  assert.equal(await page.locator(".file-row").count(), 0);
+  assert.equal(
+    await page.locator(".tool-panel:not([hidden]) .file-row").count(),
+    0,
+  );
   await page.getByRole("button", { name: "Parent folder" }).click();
   await page.getByRole("button", { name: "hello.txt" }).waitFor();
 
